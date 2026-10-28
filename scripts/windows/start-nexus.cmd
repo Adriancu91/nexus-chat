@@ -19,6 +19,8 @@ if not exist "%LOGDIR%" mkdir "%LOGDIR%"
 title NEXUS CHAT server
 
 :loop
+rem Un server media ramas de la o oprire brusca ar tine porturile ocupate.
+taskkill /f /im livekit-server.exe >nul 2>nul
 echo [%date% %time%] pornire server >> "%LOGDIR%\server.log"
 node "%ROOT%\server\src\main.ts" >> "%LOGDIR%\server.log" 2>&1
 echo [%date% %time%] serverul s-a oprit (cod %errorlevel%), repornesc in 15 s >> "%LOGDIR%\server.log"
