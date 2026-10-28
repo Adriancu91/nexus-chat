@@ -98,4 +98,47 @@ export const migrations: Migration[] = [
       CREATE INDEX idx_audit_at ON audit_log(at);
     `,
   },
+  {
+    version: 2,
+    name: 'files-search-settings',
+    sql: `
+      -- Metadatele fișierelor. Conținutul stă pe disc, la data/files/<storage_key>;
+      -- storage_key este generat de server (niciodată din numele trimis de utilizator).
+      CREATE TABLE files (
+        id TEXT PRIMARY KEY,
+        room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+        storage_key TEXT NOT NULL UNIQUE,
+        original_name TEXT NOT NULL,
+        mime TEXT NOT NULL,
+        inline_safe INTEGER NOT NULL DEFAULT 0,
+        size INTEGER NOT NULL,
+        sha256 TEXT NOT NULL,
+        uploader_kind TEXT NOT NULL CHECK (uploader_kind IN ('admin', 'participant')),
+        uploader_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_files_room ON files(room_id);
+
+      ALTER TABLE messages ADD COLUMN file_id TEXT REFERENCES files(id) ON DELETE CASCADE;
+      CREATE INDEX idx_messages_file ON messages(file_id) WHERE file_id IS NOT NULL;
+      CREATE INDEX idx_messages_created ON messages(created_at);
+
+      -- Căutare full-text, fără diacritice („maine” găsește „mâine”).
+      CREATE VIRTUAL TABLE messages_fts USING fts5(body, file_name, tokenize = 'unicode61 remove_diacritics 2');
+      INSERT INTO messages_fts (rowid, body, file_name) SELECT seq, body, '' FROM messages;
+      CREATE TRIGGER messages_fts_insert AFTER INSERT ON messages BEGIN
+        INSERT INTO messages_fts (rowid, body, file_name)
+        VALUES (new.seq, new.body, COALESCE((SELECT original_name FROM files WHERE id = new.file_id), ''));
+      END;
+      CREATE TRIGGER messages_fts_delete AFTER DELETE ON messages BEGIN
+        DELETE FROM messages_fts WHERE rowid = old.seq;
+      END;
+
+      CREATE TABLE settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `,
+  },
 ];

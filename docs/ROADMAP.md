@@ -5,8 +5,8 @@
 | M0 | Inspecție, arhitectură, riscuri, documentație | **Finalizat** |
 | M1 | Backend: admin criptografic, camere, sesiuni, SQLite + migrații, mesaje în timp real, teste | **Finalizat** (41/41 teste) |
 | M2 | Web Client responsive (română), intrare în cameră, chat, panou admin, reconectare, teste E2E | **Finalizat** (13/13 E2E) |
-| M3 | Fișiere (upload/download, SHA-256, limite, spațiu pe disc), backup + restaurare testată, retenție, căutare (FTS5) | Următorul |
-| M4 | GitHub Pages + Tailscale Funnel, teste de pe rețele diferite | Planificat — necesită aprobarea ta pentru publicare |
+| M3 | Fișiere (upload/download, SHA-256, limite, spațiu pe disc), backup + restaurare testată, retenție, căutare (FTS5) | **Finalizat** (61/61 server, 20/20 E2E) |
+| M4 | GitHub Pages + Tailscale Funnel, teste de pe rețele diferite | Următorul — necesită aprobarea ta pentru publicare |
 | M5 | Apeluri: semnalizare, mediasoup pe laptop, 1:1 apoi grup, verificarea topologiei | Planificat — risc ridicat (vezi CONECTIVITATE.md) |
 | M6 | Aplicația Windows (Tauri): instalare, pornire/oprire, iconiță, backup, actualizare | Planificat |
 | M7 | Audit de securitate, regresie, restaurare, documentație de operare, checklist lansare | Planificat |
@@ -73,3 +73,51 @@ istoric, backup/restaurare (M3; ecranul de stare spune explicit asta), apeluri (
   încă; vor fi verificate pe dispozitive reale în M4, când aplicația devine accesibilă din internet.
 - Dacă datele site-ului sunt șterse din browser, cheia de administrator a acelui dispozitiv se pierde:
   se reînrolează cu un cod nou (de pe alt dispozitiv sau `npm run admin:code`).
+
+## Raport M3
+
+**Implementat**
+- **Fișiere:** upload cu progres și anulare (buton, sau trage-și-plasează pe desktop), mesaj cu
+  fișier și text opțional, descărcare autorizată, previzualizare pentru imagini JPEG/PNG/GIF/WebP
+  verificate după conținut, panoul „Fișiere” al camerei.
+  - Pe disc: `data/files/<aa>/<uuid>`, nume generat de server; SHA-256 calculat în timpul
+    transferului; scriere în `tmp/` + `fsync` + redenumire atomică, apoi tranzacție SQLite.
+  - Refuzate: programe și scripturi Windows (după extensie și după semnătura `MZ`, chiar deghizate).
+  - Limite: 100 MB per fișier (`NEXUS_MAX_FILE_MB`), refuz dacă pe disc ar rămâne sub 1 GB,
+    30 de upload-uri / 10 min per sesiune.
+  - Ștergerea camerei sau retenția șterg și fișierele de pe disc. La pornire: curățarea
+    transferurilor neterminate și a fișierelor fără înregistrare (după o cădere de curent).
+- **Căutare** în istoricul camerei (SQLite FTS5): fără diacritice („maine” → „Mâine”), după prefix,
+  inclusiv în numele fișierelor; termenii găsiți sunt evidențiați; clic pe rezultat → salt la mesaj.
+- **Backup:** automat (implicit la 24 h, ultimele 7 copii) și manual („Fă backup acum”).
+  Baza de date copiată consistent cu `VACUUM INTO` (merge cu serverul pornit); fișierele copiate o
+  singură dată într-un depozit comun (incremental); manifest cu SHA-256 pentru tot; un backup apare
+  doar după ce a fost scris complet. Verificare la cerere. Folder configurabil (disc extern).
+- **Restaurare** (linia de comandă, cu serverul oprit): verifică întâi backup-ul complet, refuză
+  dacă serverul rulează, construiește arhiva nouă separat și păstrează arhiva veche redenumită.
+- **Retenție** configurabilă (pentru totdeauna / 1 an / 6 luni / 3 luni / 30 de zile), cu
+  previzualizarea a ce se va șterge și confirmare.
+- **Integritate:** `PRAGMA integrity_check`, chei străine și SHA-256 pentru fiecare fișier.
+- **Blocarea arhivei:** un al doilea server pe aceeași arhivă este refuzat.
+
+**Testat**
+- `npm test`: 61 de teste. Include un ciclu real backup → ștergerea camerei → restaurare →
+  pornirea serverului pe arhiva restaurată, cu mesajele, poza (octet cu octet) și sesiunile înapoi.
+  Mai acoperă: backup corupt refuzat, comenzile din linia de comandă, izolarea fișierelor între
+  camere, tipurile refuzate, retenția (inclusiv fișierele de pe disc și indexul de căutare),
+  detectarea fișierelor lipsă sau corupte.
+- `npm run test:e2e`: 20 de teste, dintre care 7 noi (upload → descărcare identică, previzualizare,
+  refuz .exe, panoul de fișiere, căutare cu salt, backup și verificare, confirmarea retenției).
+
+**Neimplementat**
+- **Backup-ul nu este criptat.** Recomandare: disc extern cu BitLocker To Go (inclus în Windows 11
+  Pro). Criptarea în aplicație ar cere o parolă de backup care, dacă se pierde, face backup-ul
+  inutilizabil; o pot adăuga dacă vrei.
+- Restaurarea din interfață (vine cu aplicația Windows, M6, care poate opri serverul).
+- Miniaturi micșorate: previzualizarea descarcă imaginea întreagă.
+- Retenția per cameră (acum este globală).
+
+**Riscuri rămase**
+- Backup-ul implicit e pe același disc cu arhiva; interfața avertizează și cere un disc extern.
+- Un fișier de 100 MB este ținut în memorie de browser la descărcare (acceptabil pe telefoane
+  moderne; pentru fișiere mai mari ar fi nevoie de descărcare directă prin link temporar).

@@ -25,7 +25,7 @@ parole sau sesiuni. Toate datele private stau pe laptopul gazdă.
 | Componentă | Tehnologie | Stare |
 |---|---|---|
 | Backend | Node.js 24 + TypeScript, `ws` | **M1 — implementat** |
-| Arhivă | SQLite (`node:sqlite`, inclus în Node) + fișiere pe disc | M1: mesaje/metadate. Fișiere: M3 |
+| Arhivă | SQLite (`node:sqlite`, inclus în Node) + fișiere pe disc | **M1 + M3 — implementat** (căutare FTS5, backup, retenție) |
 | Web Client | TypeScript + Vite, fără framework, română | **M2 — implementat** |
 | Conectare externă | Tailscale Funnel (recomandat) — vezi [CONECTIVITATE.md](CONECTIVITATE.md) | M4 |
 | Server media | mediasoup (SFU) pe laptop | M5 |
@@ -117,12 +117,33 @@ nexus-chat/
    abonaților camerei. `clientMsgId` face retrimiterea idempotentă.
 5. După reconectare sau repornirea serverului, `subscribe` cu `afterSeq` aduce exact mesajele lipsă.
 
-### Fișiere (M3), Apeluri (M5)
-Descrise în [ROADMAP.md](ROADMAP.md); vor fi detaliate aici la implementare.
+### Fișiere (M3)
+1. Browserul trimite fișierul ca flux binar (`POST /api/rooms/:id/files`), numele în antetul `X-File-Name`.
+2. Serverul verifică sesiunea, camera, dimensiunea, spațiul liber pe disc și limita de ritm.
+3. Conținutul se scrie în `data/tmp/`, cu SHA-256 calculat pe parcurs, apoi `fsync`.
+4. Tipul este stabilit din extensie **și** din primii octeți; programele sunt refuzate.
+5. Fișierul este mutat atomic în `data/files/<aa>/<uuid>`; metadatele și mesajul se salvează într-o tranzacție.
+6. Mesajul este distribuit prin WebSocket; descărcarea (`GET /api/files/:id`) verifică din nou accesul la cameră.
+
+Căile de pe disc provin exclusiv din baza de date; numele trimis de utilizator este doar afișat.
+
+### Backup și restaurare (M3)
+```
+backups/
+  store/<aa>/<uuid>            fișierele, copiate o singură dată (incremental)
+  snapshots/nexus-<dată>/      nexus.db (VACUUM INTO) + manifest.json (SHA-256 pentru tot)
+```
+Restaurarea (`npm run restore -- <nume>`) verifică manifestul, construiește arhiva într-un folder separat,
+apoi o pune în locul celei vechi, care este doar redenumită.
+
+### Apeluri (M5)
+Descrise în [CONECTIVITATE.md](CONECTIVITATE.md).
 
 ## Politica de istoric
-- Mesajele și metadatele sunt păstrate până la ștergerea camerei de către administrator
-  (politica de retenție configurabilă vine în M3).
+- Mesajele, fișierele și metadatele sunt păstrate pentru totdeauna, implicit. Administratorul poate
+  alege o perioadă de păstrare (30 de zile – 1 an); ce e mai vechi se șterge automat (verificare la 10 min).
+- Ștergerea unei camere șterge mesajele și fișierele ei. Backup-urile existente nu sunt modificate
+  de retenție; dispar când sunt înlocuite de copii mai noi.
 - Apelurile nu sunt înregistrate. O eventuală înregistrare va fi o funcție separată, vizibilă
   tuturor participanților, controlată explicit.
 - Jurnalul administrativ (`audit_log`) păstrează acțiunile administrative, fără parole, tokenuri

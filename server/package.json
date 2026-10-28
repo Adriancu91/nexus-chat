@@ -11,7 +11,9 @@
     "start": "node src/main.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.ts\"",
-    "admin:code": "node src/cli/admin-code.ts"
+    "admin:code": "node src/cli/admin-code.ts",
+    "backup": "node src/cli/backup.ts",
+    "restore": "node src/cli/backup.ts --restore"
   },
   "dependencies": {
     "ws": "^8.22.0"

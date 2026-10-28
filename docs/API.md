@@ -53,3 +53,26 @@ returnat în răspuns.
 
 Coduri de închidere: 4401 neautentificat, 4403 sesiune revocată, 4408 timp de autentificare depășit,
 1001 oprire server.
+
+## Fișiere și căutare (M3)
+| Metodă | Cale | Detalii |
+|---|---|---|
+| POST | `/api/rooms/:roomId/files` | Corp binar (`Content-Type: application/octet-stream`, `Content-Length` obligatoriu), `X-File-Name` și opțional `X-Caption` codificate cu `encodeURIComponent`. → 201 `{message}` (mesajul conține `file`). Erori: 413 prea mare, 415 tip refuzat, 507 disc plin, 429. |
+| GET | `/api/files/:fileId[?download=1]` | Conținutul fișierului, după verificarea accesului la cameră. |
+| GET | `/api/rooms/:roomId/files?limit&beforeSeq` | Mesajele cu fișiere, cele mai noi primele. |
+| GET | `/api/rooms/:roomId/search?q&limit` | `{results: [{message, snippet}]}`; în `snippet`, termenii găsiți sunt între `\u0001` și `\u0002`. |
+
+Mesajele (HTTP și WebSocket) au acum câmpul `file: {id, name, size, mime, previewable, sha256} | null`.
+
+## Arhivă (doar administrator)
+| Metodă | Cale | Corp / răspuns |
+|---|---|---|
+| GET | `/api/admin/archive` | setări, folder backup, lista backup-urilor, starea ultimului backup, spațiu liber |
+| PUT | `/api/admin/archive/settings` | `{retentionDays?: number\|null, backup?: {enabled?, intervalHours?, keep?, dir?}}` → `{settings, retentionApplied}` |
+| GET | `/api/admin/archive/retention-preview?days=N` | `{messages, files, fileBytes}` care ar fi șterse |
+| POST | `/api/admin/archive/backups` | creează un backup acum → 201 `{backup}` (409 dacă rulează deja unul) |
+| POST | `/api/admin/archive/backups/:name/verify` | `{name, ok, problems}` |
+| POST | `/api/admin/archive/verify` | integritatea arhivei curente |
+
+Linia de comandă (pe laptop): `npm run backup`, `npm run backup -- --list`, `npm run backup -- --verify <nume>`,
+`npm run restore -- <nume>` (opțiuni `--data-dir`, `--backup-dir`).

@@ -1,7 +1,11 @@
+import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { createApp } from './app.ts';
 import { loadConfig } from './config.ts';
 import { ensureBootstrapCode } from './services/admin.ts';
+import { sweepStorage } from './services/files.ts';
+import { acquireServerLock } from './services/lock.ts';
+import { Maintenance } from './services/maintenance.ts';
 
 const { values } = parseArgs({
   options: {
@@ -17,8 +21,22 @@ if (values.port) env.NEXUS_PORT = values.port;
 if (values.host) env.NEXUS_HOST = values.host;
 
 const config = loadConfig(env);
+fs.mkdirSync(config.dataDir, { recursive: true });
+let releaseLock: () => void;
+try {
+  releaseLock = acquireServerLock(config.dataDir);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+}
 const app = createApp(config);
+const swept = await sweepStorage(app.ctx);
+if (swept.tmpRemoved + swept.orphansRemoved > 0) {
+  console.log(`Curățenie la pornire: ${swept.tmpRemoved} transferuri neterminate, ${swept.orphansRemoved} fișiere fără înregistrare.`);
+}
 const addr = await app.listen();
+const maintenance = new Maintenance(app.ctx);
+maintenance.start();
 
 console.log(`NEXUS CHAT server pornit pe http://${addr.address}:${addr.port}`);
 console.log(`Arhiva locală: ${config.dataDir}`);
@@ -44,7 +62,9 @@ async function shutdown(signal: string) {
   if (stopping) return;
   stopping = true;
   console.log(`\n${signal} primit — opresc serverul și închid arhiva în siguranță...`);
+  maintenance.stop();
   await app.close();
+  releaseLock();
   console.log('Server oprit.');
   process.exit(0);
 }

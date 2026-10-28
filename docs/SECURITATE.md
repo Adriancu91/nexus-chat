@@ -85,10 +85,21 @@ mesaj WebSocket — niciodată în URL (URL-urile ajung în jurnale de proxy).
 | Adresa serverului | Vine din build sau din Setări, **niciodată din link-uri**, ca un link primit să nu poată trimite pe cineva către un server străin. Pentru adrese non-locale se acceptă doar https://. |
 | Fără cookie-uri | `credentials: omit`, deci CSRF nu se aplică. |
 
+## Fișiere și backup (M3, cu teste)
+
+| Măsură | Detalii |
+|---|---|
+| Path traversal imposibil | Pe disc: `files/<aa>/<uuid>` generat de server; numele utilizatorului e doar afișat, curățat de căi, caractere de control și nume rezervate Windows. |
+| Fișiere periculoase | Extensiile executabile Windows sunt refuzate, iar orice fișier care începe cu semnătura `MZ` (program) e refuzat chiar dacă se numește „poza.jpg”. |
+| Servire sigură | Doar imaginile verificate după conținut sunt servite cu tipul real; restul ca `application/octet-stream` + `attachment`, plus `nosniff` și `CSP: sandbox`. Un HTML deghizat nu poate rula. |
+| Autorizare | Fiecare descărcare verifică sesiunea și camera. Tokenul merge în antet, nu în URL; previzualizările sunt blob-uri locale. |
+| Abuz de resurse | 100 MB/fișier, 30 upload-uri/10 min, refuz când discul ar rămâne sub 1 GB. |
+| Integritate | SHA-256 la upload, la backup (verificat după copiere), la restaurare și la verificarea la cerere. |
+| Backup | Fără date private în GitHub. **Necriptat**: protejează folderul de backup cu BitLocker To Go pe un disc extern. Restaurarea refuză un backup cu amprente greșite și nu șterge arhiva existentă. |
+| O singură instanță | Fișierul `server.lock` împiedică două servere să scrie în aceeași arhivă. |
+
 ## Încă neimplementat (planificat)
-- Upload-uri periculoase, path traversal (M3): fișierele vor avea nume interne UUID, niciodată
-  căi primite de la utilizator; descărcare cu `Content-Disposition: attachment` și `nosniff`.
-- Backup criptat și verificat (M3).
+- Criptarea backup-urilor în aplicație (opțională; vezi raportul M3).
 - HTTPS/WSS extern (M4) — local serverul vorbește HTTP pe 127.0.0.1; TLS este oferit de tunel.
 - Audit de securitate complet (M7).
 

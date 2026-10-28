@@ -84,7 +84,17 @@ export interface Message {
   senderId: string;
   senderName: string;
   body: string;
+  file: MessageFile | null;
   createdAt: number;
+}
+
+export interface MessageFile {
+  id: string;
+  name: string;
+  size: number;
+  mime: string;
+  previewable: boolean;
+  sha256: string;
 }
 
 export interface JoinResponse {

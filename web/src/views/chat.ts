@@ -1,15 +1,26 @@
 import { adminToken, clearAdminSession, NotEnrolledError } from '../adminAuth.ts';
-import type { Message } from '../api.ts';
+import { errorMessage, request, type Message } from '../api.ts';
 import { clear, h, icon } from '../dom.ts';
+import { PreviewCache, saveFile, uploadFile, type UploadHandle } from '../files.ts';
 import { navigate } from '../nav.ts';
 import { RoomConnection, type ConnectionState, type PendingMessage, type PresenceEntry } from '../realtime.ts';
 import { forgetRoomSession, getRoomSession, leaveRoom } from '../sessions.ts';
-import { dayLabel, dialog, formatDateTime, formatTime, iconButton, initials, senderHue, toast } from '../ui.ts';
+import { dayLabel, dialog, formatBytes, formatDateTime, formatTime, iconButton, initials, senderHue, toast } from '../ui.ts';
 import { appBar, card, page } from './layout.ts';
 
 const MAX_CHARS = 4000;
 const GROUP_GAP_MS = 5 * 60_000;
 const URL_RE = /\bhttps?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]]/g;
+const MAX_JUMP_PAGES = 30;
+
+type PanelMode = 'people' | 'files' | 'search';
+
+interface ActiveUpload {
+  id: string;
+  file: File;
+  progress: number;
+  handle: UploadHandle;
+}
 
 export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: boolean }): (() => void) | void {
   const session = opts.asAdmin ? undefined : getRoomSession(opts.roomId);
@@ -22,13 +33,18 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
   }
 
   const mySenderId = opts.asAdmin ? 'admin' : session!.participantId;
+  const token = opts.asAdmin ? adminToken : async () => session!.token;
   const messages = new Map<string, Message>();
+  const uploads = new Map<string, ActiveUpload>();
+  const previews = new PreviewCache();
   let pending: PendingMessage[] = [];
   let online: PresenceEntry[] = [];
   let hasOlder = false;
   let loadingOlder = false;
   let roomClosed = false;
   let unread = 0;
+  let panelMode: PanelMode | null = null;
+  let jumpTarget: { seq: number; pages: number } | null = null;
   const baseTitle = document.title;
 
   // ---- structură ----
@@ -41,19 +57,27 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
   const scroller = h('div', { class: 'chat-scroll' }, olderBtn, list);
   const textarea = h('textarea', { rows: 1, placeholder: 'Scrie un mesaj', 'aria-label': 'Scrie un mesaj', maxlength: MAX_CHARS, enterkeyhint: 'send' });
   const counter = h('span', { class: 'counter', hidden: true });
+  const fileInput = h('input', { type: 'file', multiple: true, hidden: true, 'data-testid': 'file-input' });
+  const attachBtn = iconButton('attach', 'Atașează fișier', () => fileInput.click(), 'attach-btn');
   const sendBtn = h('button', { class: 'send-btn', type: 'submit', 'aria-label': 'Trimite', title: 'Trimite' }, icon('send'));
-  const composer = h('form', { class: 'composer' }, h('div', { class: 'composer-input' }, textarea, counter), sendBtn);
+  const composer = h('form', { class: 'composer' }, attachBtn, fileInput, h('div', { class: 'composer-input' }, textarea, counter), sendBtn);
   const closedNote = h('div', { class: 'closed-note', hidden: true }, 'Camera este închisă. Nu se mai pot trimite mesaje.');
-  const peopleList = h('ul', { class: 'people-list', 'data-testid': 'people-list' });
+  const panelTitle = h('h2', null);
+  const panelBody = h('div', { class: 'side-body' });
   const panel = h(
     'aside',
-    { class: 'side-panel', hidden: true, 'aria-label': 'Participanți' },
-    h('div', { class: 'side-head' }, h('h2', null, 'Participanți online'), iconButton('close', 'Închide', () => togglePanel(false))),
-    peopleList,
-    opts.asAdmin ? h('p', { class: 'muted small' }, 'Lista completă și revocarea accesului sunt în panoul de administrare.') : null,
+    { class: 'side-panel', hidden: true, 'aria-labelledby': 'side-title' },
+    h('div', { class: 'side-head' }, panelTitle, iconButton('close', 'Închide panoul', () => openPanel(null))),
+    panelBody,
   );
+  panelTitle.id = 'side-title';
+  const main = h('main', { class: 'chat-main' }, scroller, closedNote, composer);
 
-  const actions = [iconButton('people', 'Participanți', () => togglePanel(Boolean(panel.hidden)))];
+  const actions = [
+    iconButton('search', 'Caută în conversație', () => openPanel(panelMode === 'search' ? null : 'search')),
+    iconButton('folder', 'Fișiere', () => openPanel(panelMode === 'files' ? null : 'files')),
+    iconButton('people', 'Participanți', () => openPanel(panelMode === 'people' ? null : 'people')),
+  ];
   if (!opts.asAdmin) actions.push(iconButton('logout', 'Ieși din cameră', () => void confirmLeave()));
 
   root.append(
@@ -62,12 +86,165 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
       { class: 'chat' },
       appBar({ title: h('span', { class: 'title-with-avatar' }, roomAvatar, title), subtitle, back: opts.asAdmin ? '/admin' : '/', actions }),
       banner,
-      h('div', { class: 'chat-body' }, h('main', { class: 'chat-main' }, scroller, closedNote, composer), panel),
+      h('div', { class: 'chat-body' }, main, panel),
     ),
   );
 
-  function togglePanel(show: boolean) {
-    panel.hidden = !show;
+  // ---- panou lateral: participanți / fișiere / căutare ----
+  function openPanel(mode: PanelMode | null) {
+    panelMode = mode;
+    panel.hidden = mode === null;
+    clear(panelBody);
+    if (mode === 'people') {
+      panelTitle.textContent = 'Participanți online';
+      renderPeople();
+    } else if (mode === 'files') {
+      panelTitle.textContent = 'Fișiere';
+      void renderFiles();
+    } else if (mode === 'search') {
+      panelTitle.textContent = 'Caută în conversație';
+      renderSearch();
+    }
+  }
+
+  function renderPeople() {
+    if (panelMode !== 'people') return;
+    clear(panelBody);
+    const ul = h('ul', { class: 'people-list', 'data-testid': 'people-list' });
+    for (const p of online) {
+      ul.append(
+        h(
+          'li',
+          null,
+          h('span', { class: 'avatar avatar-sm', style: { '--hue': senderHue(p.senderId) } }, initials(p.displayName)),
+          h('span', null, p.displayName, p.senderId === mySenderId ? ' (tu)' : ''),
+          p.senderKind === 'admin' ? h('span', { class: 'badge' }, 'admin') : null,
+        ),
+      );
+    }
+    if (online.length === 0) ul.append(h('li', { class: 'muted' }, 'Nimeni online.'));
+    panelBody.append(ul);
+    if (opts.asAdmin) panelBody.append(h('p', { class: 'muted small' }, 'Lista completă și revocarea accesului sunt în panoul de administrare.'));
+  }
+
+  async function renderFiles() {
+    panelBody.append(h('p', { class: 'muted small' }, 'Se încarcă…'));
+    try {
+      const res = await request<{ messages: Message[] }>('GET', `/api/rooms/${opts.roomId}/files?limit=200`, { token: await token() });
+      if (panelMode !== 'files') return;
+      clear(panelBody);
+      if (res.messages.length === 0) {
+        panelBody.append(h('p', { class: 'muted' }, 'Niciun fișier trimis încă.'));
+        return;
+      }
+      panelBody.append(
+        h(
+          'ul',
+          { class: 'file-list', 'data-testid': 'file-list' },
+          res.messages.map((m) =>
+            h(
+              'li',
+              null,
+              fileCard(m, false),
+              h('div', { class: 'muted small' }, `${m.senderName} · ${formatDateTime(m.createdAt)}`),
+            ),
+          ),
+        ),
+      );
+    } catch (err) {
+      clear(panelBody);
+      panelBody.append(h('p', { class: 'form-error' }, errorMessage(err)));
+    }
+  }
+
+  function renderSearch() {
+    const input = h('input', { type: 'search', placeholder: 'Cuvinte sau nume de fișier', 'aria-label': 'Text de căutat', enterkeyhint: 'search' });
+    const results = h('div', { class: 'search-results', 'aria-live': 'polite', 'data-testid': 'search-results' });
+    let timer: number | undefined;
+    let seqNo = 0;
+    const run = async () => {
+      const q = input.value.trim();
+      const mine = ++seqNo;
+      clear(results);
+      if (!q) return;
+      results.append(h('p', { class: 'muted small' }, 'Se caută…'));
+      try {
+        const res = await request<{ results: { message: Message; snippet: string }[] }>(
+          'GET',
+          `/api/rooms/${opts.roomId}/search?q=${encodeURIComponent(q)}`,
+          { token: await token() },
+        );
+        if (mine !== seqNo) return;
+        clear(results);
+        if (res.results.length === 0) {
+          results.append(h('p', { class: 'muted' }, 'Niciun rezultat.'));
+          return;
+        }
+        results.append(
+          h('p', { class: 'muted small' }, res.results.length === 50 ? 'Primele 50 de rezultate:' : `${countRo(res.results.length, 'rezultat', 'rezultate')}:`),
+          h(
+            'ul',
+            { class: 'result-list' },
+            res.results.map((r) =>
+              h(
+                'li',
+                null,
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    class: 'result',
+                    'data-testid': 'search-result',
+                    onclick: () => {
+                      if (matchMedia('(max-width: 760px)').matches) openPanel(null);
+                      jumpTo(r.message.seq);
+                    },
+                  },
+                  h('span', { class: 'result-meta' }, h('strong', null, r.message.senderName), ` · ${formatDateTime(r.message.createdAt)}`),
+                  h('span', { class: 'result-snippet' }, ...highlight(r.snippet)),
+                ),
+              ),
+            ),
+          ),
+        );
+      } catch (err) {
+        if (mine !== seqNo) return;
+        clear(results);
+        results.append(h('p', { class: 'form-error' }, errorMessage(err)));
+      }
+    };
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = window.setTimeout(() => void run(), 300);
+    });
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        clearTimeout(timer);
+        void run();
+      }
+    });
+    panelBody.append(input, results);
+    input.focus();
+  }
+
+  /** Derulează la un mesaj; dacă nu e încărcat, încarcă pagini mai vechi până ajunge la el. */
+  function jumpTo(seq: number) {
+    const el = list.querySelector<HTMLElement>(`[data-seq="${seq}"]`);
+    if (el) {
+      jumpTarget = null;
+      el.scrollIntoView({ block: 'center' });
+      el.classList.remove('msg-flash');
+      void el.offsetWidth;
+      el.classList.add('msg-flash');
+      return;
+    }
+    if (!hasOlder) return toast('Mesajul nu mai este în istoric.', 'info');
+    jumpTarget = { seq, pages: (jumpTarget?.seq === seq ? jumpTarget.pages : 0) + 1 };
+    if (jumpTarget.pages > MAX_JUMP_PAGES) {
+      jumpTarget = null;
+      return toast('Mesajul este foarte vechi; derulează în sus pentru a-l găsi.', 'info');
+    }
+    loadOlder();
   }
 
   // ---- afișare mesaje ----
@@ -83,7 +260,7 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
     const sorted = [...messages.values()].sort((a, b) => a.seq - b.seq);
     let prev: { senderId: string; createdAt: number } | null = null;
     let prevDay = '';
-    if (sorted.length === 0 && pending.length === 0) {
+    if (sorted.length === 0 && pending.length === 0 && uploads.size === 0) {
       list.append(h('p', { class: 'empty-chat' }, 'Niciun mesaj încă. Scrie primul mesaj!'));
     }
     for (const m of sorted) {
@@ -98,6 +275,7 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
       prev = m;
     }
     for (const p of pending) list.append(pendingEl(p));
+    for (const u of uploads.values()) list.append(uploadEl(u));
     olderBtn.hidden = !hasOlder;
     if (stick) scroller.scrollTop = scroller.scrollHeight;
     else if (mode === 'keep') scroller.scrollTop = prevTop + (scroller.scrollHeight - prevHeight);
@@ -119,10 +297,58 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
               m.senderKind === 'admin' ? h('span', { class: 'badge' }, 'admin') : null,
             )
           : null,
-        h('div', { class: 'body' }, ...linkify(m.body)),
+        m.file ? fileCard(m, true) : null,
+        m.body ? h('div', { class: 'body' }, ...linkify(m.body)) : null,
         h('div', { class: 'meta' }, h('time', { datetime: new Date(m.createdAt).toISOString(), title: formatDateTime(m.createdAt) }, formatTime(m.createdAt)), own ? icon('check', 'Salvat pe server') : null),
       ),
     );
+  }
+
+  function fileCard(m: Message, withPreview: boolean): HTMLElement {
+    const f = m.file!;
+    const download = async (btn: HTMLButtonElement) => {
+      btn.disabled = true;
+      try {
+        await saveFile(f.id, f.name, await token());
+      } catch (err) {
+        toast(errorMessage(err), 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    const dlBtn = h('button', { type: 'button', class: 'icon-btn file-dl', 'aria-label': `Descarcă ${f.name}`, title: 'Descarcă' }, icon('download'));
+    dlBtn.addEventListener('click', () => void download(dlBtn));
+    let preview: HTMLElement | null = null;
+    if (withPreview && f.previewable) {
+      const img = h('img', { class: 'thumb', alt: f.name, 'data-testid': 'image-preview' });
+      const unavailable = () => img.parentElement?.replaceWith(h('span', { class: 'muted small' }, 'Previzualizare indisponibilă'));
+      img.addEventListener('error', unavailable, { once: true });
+      previews.get(f.id, token).then((url) => {
+        img.src = url;
+      }, unavailable);
+      preview = h('button', { type: 'button', class: 'thumb-btn', 'aria-label': `Deschide imaginea ${f.name}`, onclick: () => void showImage(f.id, f.name) }, img);
+    }
+    return h(
+      'div',
+      { class: 'file-block' },
+      preview,
+      h(
+        'div',
+        { class: 'file-card', 'data-testid': 'file-card' },
+        h('span', { class: 'file-icon' }, icon('file')),
+        h('span', { class: 'file-info' }, h('span', { class: 'file-name' }, f.name), h('span', { class: 'file-size' }, formatBytes(f.size))),
+        dlBtn,
+      ),
+    );
+  }
+
+  async function showImage(fileId: string, name: string) {
+    const url = await previews.get(fileId, token);
+    await dialog({
+      title: name,
+      body: [h('img', { class: 'lightbox-img', src: url, alt: name })],
+      confirmLabel: 'Închide',
+    });
   }
 
   function pendingEl(p: PendingMessage): HTMLElement {
@@ -133,20 +359,63 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
     );
   }
 
-  function renderPeople() {
-    clear(peopleList);
-    for (const p of online) {
-      peopleList.append(
+  function uploadEl(u: ActiveUpload): HTMLElement {
+    const pct = Math.round(u.progress * 100);
+    return h(
+      'div',
+      { class: 'msg msg-own msg-pending', 'data-testid': 'upload-progress' },
+      h(
+        'div',
+        { class: 'bubble' },
         h(
-          'li',
-          null,
-          h('span', { class: 'avatar avatar-sm', style: { '--hue': senderHue(p.senderId) } }, initials(p.displayName)),
-          h('span', null, p.displayName, p.senderId === mySenderId ? ' (tu)' : ''),
-          p.senderKind === 'admin' ? h('span', { class: 'badge' }, 'admin') : null,
+          'div',
+          { class: 'file-card' },
+          h('span', { class: 'file-icon' }, icon('file')),
+          h('span', { class: 'file-info' }, h('span', { class: 'file-name' }, u.file.name), h('span', { class: 'file-size' }, `Se încarcă… ${pct}% din ${formatBytes(u.file.size)}`)),
+          h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Anulează încărcarea', title: 'Anulează', onclick: () => u.handle.cancel() }, icon('close')),
         ),
+        h('progress', { max: 100, value: pct, 'aria-label': `Încărcare ${u.file.name}` }),
+      ),
+    );
+  }
+
+  async function startUploads(files: FileList | File[]) {
+    if (roomClosed) return;
+    for (const file of Array.from(files)) {
+      if (file.size === 0) {
+        toast(`„${file.name}” este gol.`, 'error');
+        continue;
+      }
+      let t: string;
+      try {
+        t = await token();
+      } catch (err) {
+        toast(errorMessage(err), 'error');
+        return;
+      }
+      const id = crypto.randomUUID();
+      const handle = uploadFile(opts.roomId, t, file, (fraction) => {
+        const u = uploads.get(id);
+        if (!u) return;
+        const before = Math.round(u.progress * 20);
+        u.progress = fraction;
+        if (Math.round(fraction * 20) !== before) render();
+      });
+      uploads.set(id, { id, file, progress: 0, handle });
+      render('bottom');
+      handle.promise.then(
+        (message) => {
+          uploads.delete(id);
+          messages.set(message.id, message);
+          render('bottom');
+        },
+        (err) => {
+          uploads.delete(id);
+          render();
+          if ((err as { code?: string }).code !== 'aborted') toast(`„${file.name}”: ${errorMessage(err)}`, 'error');
+        },
       );
     }
-    if (online.length === 0) peopleList.append(h('li', { class: 'muted' }, 'Nimeni online.'));
   }
 
   function setStatus(s: ConnectionState) {
@@ -181,6 +450,7 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
 
   function endSession(reason: string) {
     composer.hidden = true;
+    for (const u of uploads.values()) u.handle.cancel();
     subtitle.textContent = 'Deconectat';
     banner.hidden = false;
     banner.className = 'conn-banner conn-error';
@@ -191,9 +461,7 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
     }
     forgetRoomSession(opts.roomId);
     banner.append(
-      reason === 'revoked'
-        ? 'Accesul tău în această cameră a fost revocat sau camera a fost închisă. '
-        : 'Sesiunea ta a expirat. ',
+      reason === 'revoked' ? 'Accesul tău în această cameră a fost revocat sau camera a fost închisă. ' : 'Sesiunea ta a expirat. ',
       h('a', { href: `#/join/${session!.roomCode}` }, 'Intră din nou'),
     );
   }
@@ -201,7 +469,7 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
   // ---- conexiune ----
   const conn = new RoomConnection(
     opts.roomId,
-    opts.asAdmin ? adminToken : async () => session!.token,
+    token,
     {
       state: setStatus,
       room(info) {
@@ -217,7 +485,9 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
         if (older) {
           hasOlder = hasMore;
           loadingOlder = false;
-          return render('keep');
+          render('keep');
+          if (jumpTarget) jumpTo(jumpTarget.seq);
+          return;
         }
         if (messages.size === batch.length) hasOlder = hasMore; // prima încărcare
         if (document.visibilityState === 'hidden') {
@@ -271,6 +541,13 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
     counter.textContent = `${len}/${MAX_CHARS}`;
   }
 
+  function loadOlder() {
+    const first = [...messages.values()].reduce((min, m) => Math.min(min, m.seq), Infinity);
+    if (loadingOlder || !Number.isFinite(first)) return;
+    loadingOlder = true;
+    conn.loadOlder(first);
+  }
+
   composer.addEventListener('submit', (ev) => {
     ev.preventDefault();
     submit();
@@ -283,12 +560,25 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
       submit();
     }
   });
-  olderBtn.addEventListener('click', () => {
-    const first = [...messages.values()].reduce((min, m) => Math.min(min, m.seq), Infinity);
-    if (loadingOlder || !Number.isFinite(first)) return;
-    loadingOlder = true;
-    conn.loadOlder(first);
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files?.length) void startUploads(fileInput.files);
+    fileInput.value = '';
   });
+  main.addEventListener('dragover', (ev) => {
+    if (ev.dataTransfer?.types.includes('Files')) {
+      ev.preventDefault();
+      main.classList.add('drop-target');
+    }
+  });
+  main.addEventListener('dragleave', () => main.classList.remove('drop-target'));
+  main.addEventListener('drop', (ev) => {
+    main.classList.remove('drop-target');
+    if (ev.dataTransfer?.files.length) {
+      ev.preventDefault();
+      void startUploads(ev.dataTransfer.files);
+    }
+  });
+  olderBtn.addEventListener('click', loadOlder);
   const onVisible = () => {
     if (document.visibilityState === 'visible') {
       unread = 0;
@@ -315,7 +605,6 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
   }
 
   render('bottom');
-  renderPeople();
   if (opts.asAdmin) {
     adminToken().then(
       () => conn.start(),
@@ -333,6 +622,8 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
 
   return () => {
     conn.stop();
+    for (const u of uploads.values()) u.handle.cancel();
+    previews.dispose();
     document.removeEventListener('visibilitychange', onVisible);
     document.title = baseTitle;
   };
@@ -350,4 +641,19 @@ function linkify(text: string): (string | HTMLElement)[] {
   }
   if (last < text.length) out.push(text.slice(last));
   return out;
+}
+
+/** „1 rezultat”, „3 rezultate”, „25 de rezultate” (de la 20 în sus, cu „de”). */
+function countRo(n: number, one: string, many: string): string {
+  if (n === 1) return `1 ${one}`;
+  return n % 100 >= 20 || n % 100 === 0 ? `${n} de ${many}` : `${n} ${many}`;
+}
+
+/** Fragmentul de căutare vine cu termenii încadrați de \u0001…\u0002; îi transformăm în <mark>, ca text. */
+function highlight(snippet: string): (string | HTMLElement)[] {
+  const out: (string | HTMLElement)[] = [];
+  for (const [i, part] of snippet.split(/\u0001|\u0002/).entries()) {
+    if (part) out.push(i % 2 === 1 ? h('mark', null, part) : part);
+  }
+  return out.length ? out : ['(fișier)'];
 }

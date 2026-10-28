@@ -3,8 +3,8 @@
 Aplicație privată de comunicare pentru familie și prieteni. Serverul și arhiva rulează pe laptopul
 proprietarului (Windows 11); interfața web va fi publicată pe GitHub Pages.
 
-> **Stare:** M2 finalizat — backend și interfață web funcționale și testate, **doar pe laptop**
-> (accesul din internet vine în M4). Fișiere, backup și apeluri nu există încă.
+> **Stare:** M3 finalizat — chat, fișiere, căutare, backup și restaurare funcționale și testate,
+> **doar pe laptop** (accesul din internet vine în M4). Apelurile nu există încă.
 > Vezi [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Documentație
@@ -56,6 +56,26 @@ Serverul ascultă doar pe `127.0.0.1:8787`. Arhiva se află în `%LOCALAPPDATA%\
 Oprire: `Ctrl+C` (închide arhiva în siguranță).
 
 Recuperare acces administrator (pe laptop): `npm run admin:code`.
+
+## Backup și restaurare
+
+Serverul face automat un backup verificat la 24 de ore (configurabil în **Administrare → Stare și
+arhivă**, unde există și butonul „Fă backup acum”). Implicit backup-urile stau în
+`%LOCALAPPDATA%\NexusChat\backups` — **pe același disc**; alege un disc extern în „Setări backup”.
+
+Restaurare (cu serverul oprit):
+
+```bash
+npm run backup -- --list
+```
+
+```bash
+npm run restore -- nexus-20261028-194757-461
+```
+
+Arhiva curentă nu este ștearsă, ci redenumită `data.inainte-de-restaurare-…`. Backup-ul este
+verificat complet (SHA-256) înainte de a fi folosit. Backup-urile **nu sunt criptate**: folosește
+BitLocker To Go pe discul extern.
 
 ## Ce nu face (intenționat)
 - Nu stochează nimic în cloud sau pe GitHub.

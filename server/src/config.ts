@@ -24,6 +24,11 @@ export interface Limits {
   adminWindowMs: number;
   messagesPerWindow: number;
   messageWindowMs: number;
+  maxFileBytes: number;
+  /** Upload-urile sunt refuzate dacă pe disc ar rămâne mai puțin de atât. */
+  minFreeDiskBytes: number;
+  uploadsPerWindow: number;
+  uploadWindowMs: number;
 }
 
 export interface Config {
@@ -69,6 +74,13 @@ function intEnv(value: string | undefined, fallback: number): number {
   return n;
 }
 
+function mbEnv(value: string | undefined, fallbackMb: number): number {
+  if (value === undefined || value === '') return fallbackMb * 1024 * 1024;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0 || n > 4096) throw new Error(`Dimensiune invalidă (MB): ${value}`);
+  return Math.round(n * 1024 * 1024);
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: ConfigOverrides = {}): Config {
   const base: Config = {
     host: env.NEXUS_HOST ?? '127.0.0.1',
@@ -99,6 +111,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Conf
       adminWindowMs: 15 * MIN,
       messagesPerWindow: 20,
       messageWindowMs: 10_000,
+      maxFileBytes: mbEnv(env.NEXUS_MAX_FILE_MB, 100),
+      minFreeDiskBytes: 1024 * 1024 * 1024,
+      uploadsPerWindow: 30,
+      uploadWindowMs: 10 * MIN,
     },
   };
   const config: Config = { ...base, ...overrides, limits: { ...base.limits, ...overrides.limits } };
