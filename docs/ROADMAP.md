@@ -130,5 +130,8 @@ pentru administrator, adresa serverului publicată în `config.json` lângă pag
 `gh-pages` cu verificarea conținutului (`npm run deploy:pages`), verificator extern
 (`npm run check:external`), ghid pas cu pas. Teste: 69/69 server, 20/20 E2E.
 
-**Neverificat încă:** nimic nu a fost publicat; Funnel este oprit; niciun test din altă rețea.
-M4 nu este finalizat până la testul de pe telefon, pe date mobile.
+**Publicat (cu aprobarea ta):** Funnel pornit pe portul 8787; pagina pe <https://adriancu91.github.io/nexus-chat/>.
+Verificări din exterior trecute (HTTPS, CORS, autorizare, WSS), inclusiv prin releul public Funnel.
+
+**Neverificat încă:** test de pe un telefon pe date mobile, Safari/iOS, antetul IP prin Funnel
+(necesită un dispozitiv de administrator înregistrat). M4 nu este finalizat până la aceste teste.

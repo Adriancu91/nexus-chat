@@ -104,8 +104,11 @@ export function readConfigFile(file: string): FileConfig {
   let raw: string;
   try {
     raw = fs.readFileSync(file, 'utf8');
-  } catch {
-    return {};
+  } catch (err) {
+    // Doar lipsa fișierului înseamnă „valori implicite”; orice altă eroare trebuie văzută.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return {};
+    throw new Error(`Nu pot citi fișierul de configurare ${file} (${code ?? String(err)}).`);
   }
   try {
     const parsed: unknown = JSON.parse(raw.replace(/^﻿/, ''));

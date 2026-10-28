@@ -12,7 +12,14 @@ Telefon (4G / Wi-Fi)                                   Laptopul tău
                      vede doar metadate          decriptează TLS aici, pe laptop
 ```
 
-## Ce există deja pe laptopul tău
+## Stare (28.10.2026)
+- **Funnel este pornit**: `https://kronos.tailb799d9.ts.net` → serverul NEXUS (`127.0.0.1:8787`). Doar acest port este expus.
+- **Pagina este publicată**: <https://adriancu91.github.io/nexus-chat/> (ramura `gh-pages`), cu `config.json` către adresa de mai sus.
+- Verificări din exterior trecute: 12/12 (`npm run check:external`), plus prin releul public Funnel: HTTPS valid, CORS, preflight, refuz origine străină, 401 fără sesiune, WebSocket.
+- **Rămâne de făcut (tu):** înregistrarea dispozitivului de administrator, testul de pe telefon pe date mobile (Android și iPhone).
+- **Rămâne de făcut (eu, după înregistrarea ta):** verificarea antetului cu IP-ul real (pasul 4).
+
+## Ce exista deja pe laptop
 Am verificat pe 28.10.2026:
 - Tailscale 1.104.2 este instalat și autentificat; laptopul se numește `kronos`.
 - Contul are HTTPS și Funnel permise (porturile 443, 8443, 10000).
@@ -40,9 +47,14 @@ dintr-o bibliotecă pe care o încarcă) ar putea:
 | B. Domeniu propriu | Cumperi un domeniu (ex. `chat.familia-ta.ro`) și îl configurezi pentru GitHub Pages. | ~10 €/an | Bun, mai multă configurare |
 | C. Rămâi pe `adriancu91.github.io` | Nimic. | 0 € | Nu recomand: securitatea NEXUS ar depinde de toate celelalte proiecte |
 
+**Decizia ta (28.10.2026): varianta C — risc acceptat.** Consecință practică: nu adăuga în celelalte
+proiecte Pages scripturi de la terți necunoscuți și nu publica cod netestat acolo. Poți trece oricând la
+varianta A; trebuie doar schimbată originea (`npm run config`) și republicată pagina.
+
 ## Pașii, după aprobarea ta
 
 Comenzile marcate *(eu)* le pot rula eu, la cererea ta; restul necesită contul tău.
+Pe acest laptop, comenzile npm din PowerShell se scriu `npm.cmd …` (politica de execuție blochează `npm.ps1`).
 
 1. **(tu, doar pentru varianta A)** Creează organizația: github.com → „+” → *New organization* → *Free*.
    Apoi în repository: *Settings → General → Transfer ownership* către organizație.

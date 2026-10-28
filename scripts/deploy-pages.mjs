@@ -5,7 +5,7 @@
 // Publică DOAR fișierele construite din web/dist (HTML, JS, CSS, pictograme) plus config.json
 // cu adresa serverului. Nicio dată privată, niciun secret. Ramura gh-pages este generată
 // automat și rescrisă la fiecare publicare.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -36,7 +36,8 @@ const git = (args, cwd = root) => execFileSync('git', args, { cwd, encoding: 'ut
 const remote = values.remote ?? git(['remote', 'get-url', 'origin']);
 
 console.log('1/4 Construiesc interfața web…');
-execFileSync('npm', ['run', 'build', '-w', 'web'], { cwd: root, stdio: 'inherit', shell: true, env: { ...process.env, VITE_BACKEND_URL: '' } });
+// Comandă fixă (fără date externe), rulată prin shell pentru npm.cmd pe Windows.
+execSync('npm run build -w web', { cwd: root, stdio: 'inherit', env: { ...process.env, VITE_BACKEND_URL: '' } });
 
 const dist = path.join(root, 'web', 'dist');
 writeFileSync(path.join(dist, 'config.json'), JSON.stringify({ backendUrl }, null, 2) + '\n');

@@ -47,6 +47,10 @@ describe('fișierul de configurare', () => {
     fs.writeFileSync(bad, '{ nu e json');
     assert.throws(() => readConfigFile(bad), /nu este JSON valid/);
   });
+  test('un fișier care există dar nu poate fi citit nu este ignorat în tăcere', () => {
+    // un director în locul fișierului produce EISDIR, nu ENOENT
+    assert.throws(() => readConfigFile(tempDir()), /Nu pot citi fișierul de configurare/);
+  });
   test('locația implicită este lângă folderul arhivei', () => {
     const base = path.join(tempDir(), 'NexusChat');
     assert.equal(configFilePath({ NEXUS_DATA_DIR: path.join(base, 'data') }), path.join(base, 'config.json'));
