@@ -48,9 +48,9 @@ Mutarea a reușit. Serverul rulează pe workstation, iar laptopul nu mai serveș
 
 - Restaurare `nexus-20261028-214646-197`: toate amprentele SHA-256 verificate.
 - **Port 8788 pe workstation**, nu 8787: portul 8787 e folosit acolo de interfața Kronos AI. Setat în
-  `%LOCALAPPDATA%NexusChatconfig.json` (`"port": 8788`). Funnel: `https://desktop-br58s2c.tailb799d9.ts.net` →
+  `%LOCALAPPDATA%\NexusChat\config.json` (`"port": 8788`). Funnel: `https://desktop-br58s2c.tailb799d9.ts.net` →
   `http://127.0.0.1:8788`. **Nu porni niciodată Funnel pe 8787 pe workstation**: ar expune interfața Kronos.
-- Pornire automată: `%APPDATA%MicrosoftWindowsStart MenuProgramsStartupNexusChat-server.cmd`.
+- Pornire automată: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\NexusChat-server.cmd`.
 - Taildrop pe Windows salvează automat fișierele primite în Downloads (`tailscale file get` găsește coada goală).
 - Pagina republicată cu `previousBackendUrls` = adresa laptopului. Verificări din exterior: 12/12; prin releul
   public o cerere durează ~0,8 s (de pe laptop 2–8 s).
