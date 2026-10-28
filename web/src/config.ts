@@ -19,13 +19,33 @@ export function normalizeBackendUrl(value: string): string {
   return (url.origin + url.pathname).replace(/\/+$/, '');
 }
 
+let publishedBackend: string | null = null;
+
 /**
- * Adresa laptopului gazdă. Vine din build (VITE_BACKEND_URL) sau din setările locale
- * ale browserului. Nu se citește niciodată din link-uri, ca un link primit să nu poată
- * redirecționa pe cineva către un server străin.
+ * Citește `config.json` publicat lângă pagină (aceeași origine, controlat de proprietarul
+ * repository-ului). Permite schimbarea adresei serverului fără un build nou.
+ */
+export async function loadPublishedConfig(): Promise<void> {
+  try {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch('./config.json', { cache: 'no-store', signal: ctrl.signal, credentials: 'omit' });
+    window.clearTimeout(timer);
+    if (!res.ok) return;
+    const data = (await res.json()) as { backendUrl?: unknown };
+    if (typeof data.backendUrl === 'string' && data.backendUrl) publishedBackend = normalizeBackendUrl(data.backendUrl);
+  } catch {
+    // fără config.json (dezvoltare) sau valoare invalidă: se folosesc celelalte surse
+  }
+}
+
+/**
+ * Adresa laptopului gazdă: setarea locală a browserului, apoi `config.json` publicat,
+ * apoi valoarea din build. Nu se citește niciodată din link-uri, ca un link primit să nu
+ * poată redirecționa pe cineva către un server străin.
  */
 export function backendUrl(): string {
-  const candidates = [safeGet(OVERRIDE_KEY), import.meta.env.VITE_BACKEND_URL as string | undefined, FALLBACK];
+  const candidates = [safeGet(OVERRIDE_KEY), publishedBackend, import.meta.env.VITE_BACKEND_URL as string | undefined, FALLBACK];
   for (const c of candidates) {
     if (!c) continue;
     try {

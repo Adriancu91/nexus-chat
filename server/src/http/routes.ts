@@ -382,6 +382,25 @@ export function buildRouter(ctx: Ctx, hub: Hub): Router {
     return ok(result);
   });
 
+  // Diagnostic pentru configurarea accesului extern: ce vede serverul despre cererea curentă.
+  // Nu conține tokenuri (antetul Authorization nu este inclus).
+  router.add('GET', '/api/admin/diagnostics/request', (rc) => {
+    requireAdmin(rc.principal);
+    const pick = ['host', 'origin', 'x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-host', 'x-real-ip', 'forwarded', 'tailscale-funnel-request', 'user-agent'];
+    const headers: Record<string, string> = {};
+    for (const name of pick) {
+      const v = rc.req.headers[name];
+      if (v !== undefined) headers[name] = Array.isArray(v) ? v.join(', ') : v;
+    }
+    return ok({
+      socketAddress: rc.req.socket.remoteAddress ?? null,
+      clientIp: rc.ip,
+      trustProxyHeader: ctx.config.trustProxyHeader,
+      allowedOrigins: ctx.config.allowedOrigins,
+      headers,
+    });
+  });
+
   router.add('POST', '/api/admin/archive/verify', async (rc) => {
     requireAdmin(rc.principal);
     return ok(await verifyArchive(ctx));

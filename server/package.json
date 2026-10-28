@@ -13,7 +13,9 @@
     "test": "node --test --test-concurrency=1 \"test/**/*.test.ts\"",
     "admin:code": "node src/cli/admin-code.ts",
     "backup": "node src/cli/backup.ts",
-    "restore": "node src/cli/backup.ts --restore"
+    "restore": "node src/cli/backup.ts --restore",
+    "config": "node src/cli/config.ts",
+    "check:external": "node src/cli/check-external.ts"
   },
   "dependencies": {
     "ws": "^8.22.0"

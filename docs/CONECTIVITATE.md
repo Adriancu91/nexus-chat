@@ -1,7 +1,6 @@
 # Conectare din afara rețelei de acasă
 
-Status: **analiză (M0)**. Nimic din acest document nu este încă configurat sau testat.
-Implementarea și testele de pe rețele diferite sunt în M4 (chat) și M5 (apeluri).
+Status: chat (M4) — pregătit, vezi ghidul [ACCES-EXTERN.md](ACCES-EXTERN.md); apeluri (M5) — analiză.
 
 ## Cerințe
 - Pagina de pe GitHub Pages este HTTPS → backend-ul trebuie să fie HTTPS/WSS cu certificat valid
