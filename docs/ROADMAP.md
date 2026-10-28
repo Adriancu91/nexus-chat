@@ -6,7 +6,7 @@
 | M1 | Backend: admin criptografic, camere, sesiuni, SQLite + migrații, mesaje în timp real, teste | **Finalizat** (41/41 teste) |
 | M2 | Web Client responsive (română), intrare în cameră, chat, panou admin, reconectare, teste E2E | **Finalizat** (13/13 E2E) |
 | M3 | Fișiere (upload/download, SHA-256, limite, spațiu pe disc), backup + restaurare testată, retenție, căutare (FTS5) | **Finalizat** (61/61 server, 20/20 E2E) |
-| M4 | GitHub Pages + Tailscale Funnel, teste de pe rețele diferite | **În curs** — partea locală gata; așteaptă aprobările tale (vezi [ACCES-EXTERN.md](ACCES-EXTERN.md)) |
+| M4 | GitHub Pages + Tailscale Funnel, teste de pe rețele diferite | **Finalizat** — server pe workstation, testat de pe telefon pe date mobile |
 | M5 | Apeluri: semnalizare, mediasoup pe laptop, 1:1 apoi grup, verificarea topologiei | Planificat — risc ridicat (vezi CONECTIVITATE.md) |
 | M6 | Aplicația Windows (Tauri): instalare, pornire/oprire, iconiță, backup, actualizare | Planificat |
 | M7 | Audit de securitate, regresie, restaurare, documentație de operare, checklist lansare | Planificat |
@@ -142,3 +142,12 @@ Mesajele merg pe WebSocket-ul deja deschis; încetineala se simte la încărcare
 previzualizări (care descarcă imaginea întreagă).
 
 **Neverificat încă:** Safari/iOS, antetul IP prin Funnel (Diagnostic conexiune).
+
+## M4 — finalizat (28.10.2026)
+
+Serverul rulează pe workstation-ul DESKTOP-BR58S2C (vezi [MUTARE-WORKSTATION.md](MUTARE-WORKSTATION.md)).
+Proprietarul a confirmat de pe telefon, după mutare: încă în cameră și administrator, fără reintrare sau
+reînregistrare, mesajele merg. Verificări din exterior 12/12, ~0,8 s per cerere.
+
+**Rămas deschis (nu blochează):** Safari/iOS netestat; antetul X-Forwarded-For prin Funnel neverificat
+(Administrare → Stare și arhivă → Diagnostic conexiune); ștergerea copiilor arhivei folosite la transfer.

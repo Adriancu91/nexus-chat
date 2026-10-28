@@ -3,8 +3,8 @@
 Aplicație privată de comunicare pentru familie și prieteni. Serverul și arhiva rulează pe laptopul
 proprietarului (Windows 11); interfața web va fi publicată pe GitHub Pages.
 
-> **Stare:** M3 finalizat — chat, fișiere, căutare, backup și restaurare funcționale și testate,
-> **doar pe laptop** (accesul din internet vine în M4). Apelurile nu există încă.
+> **Stare:** M4 finalizat — chat, fișiere, căutare, backup, acces din internet (GitHub Pages + Tailscale Funnel).
+> Serverul rulează pe workstation-ul pornit 24/7. Apelurile (M5) nu există încă.
 > Vezi [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Documentație
