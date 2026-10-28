@@ -1,0 +1,11 @@
+{
+  "name": "NEXUS CHAT",
+  "short_name": "NEXUS",
+  "lang": "ro",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#efeae2",
+  "theme_color": "#0f7b6c",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
