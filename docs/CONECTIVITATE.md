@@ -39,6 +39,10 @@ Un tunel HTTPS nu transportă UDP.
 | C. Port forwarding UDP în router | Direct | Cea mai bună calitate | Expune porturi; nu merge sub CGNAT (frecvent la operatorii mobili/fibră) |
 | D. Participanții instalează Tailscale | Rețea privată | Simplu tehnic | Nepractic pentru familie |
 
+Măsurătoare (28.10.2026): o conexiune nouă prin Funnel durează 1,9–7,7 s (releu Frankfurt), local 7 ms.
+Pentru apeluri asta face varianta A puțin probabilă: media peste TCP printr-un releu atât de lent ar avea
+întârzieri mari. Laptopul are UDP funcțional spre internet (tailscale netcheck).
+
 Plan M5: prototip A (2 participanți, rețele diferite), cu verificarea topologiei în
 `chrome://webrtc-internals` (perechea ICE selectată trebuie să fie adresa laptopului/Funnel, nu
 adresa celuilalt participant). Dacă A nu oferă calitate acceptabilă, B este varianta de rezervă,

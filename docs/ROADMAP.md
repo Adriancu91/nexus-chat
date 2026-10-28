@@ -133,5 +133,12 @@ pentru administrator, adresa serverului publicată în `config.json` lângă pag
 **Publicat (cu aprobarea ta):** Funnel pornit pe portul 8787; pagina pe <https://adriancu91.github.io/nexus-chat/>.
 Verificări din exterior trecute (HTTPS, CORS, autorizare, WSS), inclusiv prin releul public Funnel.
 
-**Neverificat încă:** test de pe un telefon pe date mobile, Safari/iOS, antetul IP prin Funnel
-(necesită un dispozitiv de administrator înregistrat). M4 nu este finalizat până la aceste teste.
+**Testat de proprietar (28.10.2026), telefon pe date mobile:** înregistrare administrator, creare cameră,
+intrare de pe telefon, mesaje în ambele sensuri, trimiterea unei poze — funcționează; „se mișcă puțin
+cam greu”.
+
+**Măsurat:** prin releul Funnel o conexiune nouă durează 1,9–7,7 s (TLS prin Frankfurt), față de 7 ms local.
+Mesajele merg pe WebSocket-ul deja deschis; încetineala se simte la încărcarea paginii, la upload-uri și la
+previzualizări (care descarcă imaginea întreagă).
+
+**Neverificat încă:** Safari/iOS, antetul IP prin Funnel (Diagnostic conexiune).
