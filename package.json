@@ -4,15 +4,19 @@
   "description": "NEXUS CHAT — chat privat pentru familie și prieteni, găzduit pe laptopul proprietarului.",
   "license": "UNLICENSED",
   "workspaces": [
-    "server"
+    "server",
+    "web"
   ],
   "engines": {
     "node": ">=24.0.0"
   },
   "scripts": {
     "start": "npm run start -w server",
-    "typecheck": "npm run typecheck -w server",
+    "dev:web": "npm run dev -w web",
+    "build:web": "npm run build -w web",
+    "typecheck": "npm run typecheck --workspaces",
     "test": "npm test -w server",
+    "test:e2e": "npm run test:e2e -w web",
     "admin:code": "npm run admin:code -w server"
   }
 }

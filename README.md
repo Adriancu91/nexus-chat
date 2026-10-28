@@ -3,8 +3,9 @@
 Aplicație privată de comunicare pentru familie și prieteni. Serverul și arhiva rulează pe laptopul
 proprietarului (Windows 11); interfața web va fi publicată pe GitHub Pages.
 
-> **Stare:** M1 finalizat — backend-ul funcționează și este testat. Interfața web (M2) nu există
-> încă, deci aplicația nu poate fi folosită încă din browser. Vezi [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Stare:** M2 finalizat — backend și interfață web funcționale și testate, **doar pe laptop**
+> (accesul din internet vine în M4). Fișiere, backup și apeluri nu există încă.
+> Vezi [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Documentație
 - [Arhitectură și decizii](docs/ARHITECTURA.md)
@@ -23,8 +24,25 @@ npm test
 npm start
 ```
 
-La prima pornire serverul afișează un **cod de inițializare a administratorului**. Nu-l trimite
-nimănui; va fi introdus în pagina de administrare (M2).
+Într-un al doilea terminal, interfața web:
+
+```bash
+npm run dev:web
+```
+
+Apoi deschide <http://localhost:5173> pe laptop.
+
+1. La prima pornire serverul afișează un **cod de inițializare a administratorului**. Nu-l trimite
+   nimănui. În pagină: **Administrare** (pictograma scut) → introdu codul → laptopul devine dispozitiv
+   de administrator.
+2. **Camere** → creează o cameră → copiază link-ul și parola.
+3. Participanții deschid link-ul, introduc parola și un nume.
+
+Teste end-to-end (pornesc singure serverul și pagina, folosesc Chrome-ul instalat):
+
+```bash
+npm run test:e2e
+```
 
 Serverul ascultă doar pe `127.0.0.1:8787`. Arhiva se află în `%LOCALAPPDATA%\NexusChat\data`.
 

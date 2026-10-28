@@ -20,3 +20,7 @@ target/
 .idea/
 Thumbs.db
 .DS_Store
+# teste E2E
+web/.e2e-data/
+web/test-results/
+web/playwright-report/

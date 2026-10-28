@@ -1,0 +1,19 @@
+{
+  "name": "@nexus-chat/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Interfața web NEXUS CHAT (statică, publicabilă pe GitHub Pages).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}

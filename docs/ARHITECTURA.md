@@ -26,7 +26,7 @@ parole sau sesiuni. Toate datele private stau pe laptopul gazdă.
 |---|---|---|
 | Backend | Node.js 24 + TypeScript, `ws` | **M1 — implementat** |
 | Arhivă | SQLite (`node:sqlite`, inclus în Node) + fișiere pe disc | M1: mesaje/metadate. Fișiere: M3 |
-| Web Client | TypeScript + Vite, PWA, română | M2 |
+| Web Client | TypeScript + Vite, fără framework, română | **M2 — implementat** |
 | Conectare externă | Tailscale Funnel (recomandat) — vezi [CONECTIVITATE.md](CONECTIVITATE.md) | M4 |
 | Server media | mediasoup (SFU) pe laptop | M5 |
 | Desktop Host | Tauri 2 (Rust) care rulează backend-ul ca proces separat | M6 |
@@ -93,6 +93,13 @@ nexus-chat/
 │   │   └── cli/            unelte locale (cod de înrolare de recuperare)
 │   └── test/               teste node:test (unitare + integrare + securitate)
 ├── web/                    Web Client (M2)
+│   ├── src/
+│   │   ├── main.ts         rutare (#/…), compatibilă cu GitHub Pages
+│   │   ├── realtime.ts     WebSocket: reconectare, coadă de mesaje, sincronizare
+│   │   ├── adminAuth.ts    cheia de administrator (WebCrypto + IndexedDB)
+│   │   ├── dom.ts          construire DOM fără innerHTML (anti-XSS)
+│   │   └── views/          ecrane: acasă, intrare, chat, administrare, setări
+│   └── e2e/                teste Playwright pe serverul real
 ├── desktop/                Aplicația Windows Tauri (M6)
 ├── docs/                   documentație
 └── .github/workflows/      CI
