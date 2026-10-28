@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HttpError } from '../errors.ts';
 import type { Config } from '../config.ts';
@@ -5,6 +6,8 @@ import type { Config } from '../config.ts';
 export interface Reply {
   status: number;
   body?: unknown;
+  /** Răspuns cu conținutul unui fișier de pe disc (descărcări). */
+  file?: { path: string; size: number; headers: Record<string, string> };
 }
 
 export const ok = (body: unknown): Reply => ({ status: 200, body });
@@ -43,6 +46,20 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 export function sendReply(res: ServerResponse, reply: Reply, extraHeaders: Record<string, string> = {}): void {
   const headers: Record<string, string> = { ...SECURITY_HEADERS, ...extraHeaders };
+  if (reply.file) {
+    const { path: file, size, headers: fileHeaders } = reply.file;
+    const stream = fs.createReadStream(file);
+    stream.once('open', () => {
+      res.writeHead(reply.status, { ...headers, ...fileHeaders, 'Content-Length': String(size) });
+      stream.pipe(res);
+    });
+    stream.once('error', () => {
+      if (!res.headersSent) sendReply(res, { status: 410, body: { error: { code: 'file_missing', message: 'Fișierul nu mai există pe server.' } } }, extraHeaders);
+      else res.destroy();
+    });
+    res.once('close', () => stream.destroy());
+    return;
+  }
   if (reply.body === undefined) {
     res.writeHead(reply.status, headers).end();
     return;
@@ -59,8 +76,8 @@ export function corsHeaders(config: Config, origin: string | undefined): Record<
   if (!config.allowedOrigins.includes(origin)) return null;
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-File-Name, X-Caption',
     'Access-Control-Max-Age': '600',
     Vary: 'Origin',
   };

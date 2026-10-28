@@ -452,30 +452,231 @@ async function statusTab(el: HTMLElement): Promise<void> {
     diskFreeBytes: number | null;
     rooms: number;
     messages: number;
+    files: number;
+    filesBytes: number;
     wsConnections: number;
   }>('GET', '/api/admin/status');
-  const row = (k: string, v: string) => h('div', { class: 'kv' }, h('dt', null, k), h('dd', null, v));
+  const a = await adminRequest<ArchiveInfo>('GET', '/api/admin/archive');
   el.append(
     card(
       h('h2', null, 'Starea serverului'),
       h(
         'dl',
         { class: 'kv-list' },
-        row('Versiune', s.version),
-        row('Pornit de', formatUptime(s.uptimeSec)),
-        row('Conexiuni active', String(s.wsConnections)),
-        row('Camere', String(s.rooms)),
-        row('Mesaje arhivate', String(s.messages)),
-        row('Dimensiune arhivă', formatBytes(s.dbSizeBytes)),
-        row('Spațiu liber pe disc', formatBytes(s.diskFreeBytes)),
-        row('Folderul arhivei', s.dataDir),
-        row('Adresa serverului', backendUrl()),
+        kv('Versiune', s.version),
+        kv('Pornit de', formatUptime(s.uptimeSec)),
+        kv('Conexiuni active', String(s.wsConnections)),
+        kv('Camere', String(s.rooms)),
+        kv('Mesaje arhivate', String(s.messages)),
+        kv('Fișiere', `${s.files} (${formatBytes(s.filesBytes)})`),
+        kv('Dimensiune bază de date', formatBytes(s.dbSizeBytes)),
+        kv('Spațiu liber pe disc', formatBytes(s.diskFreeBytes)),
+        kv('Limită per fișier', formatBytes(a.maxFileBytes)),
+        kv('Folderul arhivei', s.dataDir),
+        kv('Adresa serverului', backendUrl()),
       ),
     ),
-    card(
-      h('h2', null, 'Backup și restaurare'),
-      h('p', { class: 'muted' }, 'Neimplementat încă (etapa M3). Până atunci, copiază manual folderul arhivei cu serverul oprit.'),
+    backupCard(a),
+    retentionCard(a),
+    integrityCard(),
+    restoreCard(a),
+  );
+}
+
+interface ArchiveInfo {
+  settings: { retentionDays: number | null; backup: { enabled: boolean; intervalHours: number; keep: number; dir: string | null } };
+  backupDir: string;
+  defaultBackupDir: string;
+  backups: { name: string; createdAt: number; dbSize: number; fileCount: number; fileBytes: number }[];
+  backupStatus: { lastAttemptAt: number | null; lastSuccessAt: number | null; lastSuccessName: string | null; lastError: string | null };
+  dataFreeBytes: number | null;
+  backupFreeBytes: number | null;
+  maxFileBytes: number;
+}
+
+const kv = (k: string, v: string) => h('div', { class: 'kv' }, h('dt', null, k), h('dd', null, v));
+
+function backupCard(a: ArchiveInfo): HTMLElement {
+  const st = a.backupStatus;
+  const nowBtn = h('button', { class: 'btn btn-primary', type: 'button' }, 'Fă backup acum');
+  nowBtn.addEventListener(
+    'click',
+    busy(nowBtn, async () => {
+      nowBtn.textContent = 'Se face backup…';
+      try {
+        const { backup } = await adminRequest<{ backup: { name: string; fileCount: number } }>('POST', '/api/admin/archive/backups');
+        toast(`Backup creat și verificat (${backup.fileCount} fișiere).`, 'ok');
+        navigate('/admin/stare');
+      } finally {
+        nowBtn.textContent = 'Fă backup acum';
+      }
+    }),
+  );
+  const settingsBtn = h('button', { class: 'btn', type: 'button', onclick: () => void editBackupSettings(a) }, 'Setări backup');
+  const sameDisk = a.settings.backup.dir === null;
+  return card(
+    h('h2', null, 'Backup'),
+    h(
+      'dl',
+      { class: 'kv-list' },
+      kv('Backup automat', a.settings.backup.enabled ? `da, la fiecare ${a.settings.backup.intervalHours} h` : 'oprit'),
+      kv('Copii păstrate', String(a.settings.backup.keep)),
+      kv('Folder', a.backupDir),
+      kv('Spațiu liber acolo', formatBytes(a.backupFreeBytes)),
+      kv('Ultimul backup reușit', st.lastSuccessAt ? formatDateTime(st.lastSuccessAt) : 'niciunul încă'),
     ),
+    st.lastError && st.lastAttemptAt !== st.lastSuccessAt
+      ? h('p', { class: 'form-error', role: 'alert' }, `Ultima încercare (${formatDateTime(st.lastAttemptAt!)}) a eșuat: ${st.lastError}`)
+      : null,
+    sameDisk
+      ? h('p', { class: 'note-warn' }, 'Backup-ul este pe același disc cu arhiva: te protejează de ștergeri accidentale și corupere, dar nu de defectarea discului sau pierderea laptopului. Alege un disc extern în „Setări backup”.')
+      : null,
+    h('div', { class: 'button-row' }, nowBtn, settingsBtn),
+    a.backups.length === 0
+      ? h('p', { class: 'muted' }, 'Nu există încă niciun backup.')
+      : h(
+          'ul',
+          { class: 'backup-list', 'data-testid': 'backup-list' },
+          a.backups.map((b) => {
+            const verify = h('button', { class: 'btn btn-small', type: 'button' }, 'Verifică');
+            verify.addEventListener(
+              'click',
+              busy(verify, async () => {
+                const r = await adminRequest<{ ok: boolean; problems: string[] }>('POST', `/api/admin/archive/backups/${b.name}/verify`);
+                if (r.ok) toast('Backup verificat: toate amprentele SHA-256 corespund.', 'ok');
+                else toast(`Backup deteriorat: ${r.problems.slice(0, 3).join('; ')}`, 'error');
+              }),
+            );
+            return h(
+              'li',
+              { 'data-testid': 'backup-row' },
+              h('div', null, h('strong', null, formatDateTime(b.createdAt)), h('div', { class: 'muted small' }, `${b.name} · ${b.fileCount} fișiere · ${formatBytes(b.dbSize + b.fileBytes)}`)),
+              verify,
+            );
+          }),
+        ),
+  );
+}
+
+async function editBackupSettings(a: ArchiveInfo): Promise<void> {
+  const b = a.settings.backup;
+  const data = await dialog({
+    title: 'Setări backup',
+    body: [
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'enabled', checked: b.enabled }), 'Backup automat'),
+      field('Interval (ore)', h('input', { name: 'intervalHours', type: 'number', min: 1, max: 720, required: true, value: b.intervalHours })),
+      field('Câte copii se păstrează', h('input', { name: 'keep', type: 'number', min: 1, max: 100, required: true, value: b.keep })),
+      field(
+        'Folder pentru backup',
+        h('input', { name: 'dir', value: b.dir ?? '', placeholder: a.defaultBackupDir, spellcheck: 'false' }),
+        'Cale completă pe laptop, ideal pe un disc extern (ex. E:\\NexusBackup). Gol = folderul implicit.',
+      ),
+    ],
+    confirmLabel: 'Salvează',
+  });
+  if (!data) return;
+  try {
+    await adminRequest('PUT', '/api/admin/archive/settings', {
+      backup: {
+        enabled: data.get('enabled') === 'on',
+        intervalHours: Number(data.get('intervalHours')),
+        keep: Number(data.get('keep')),
+        dir: String(data.get('dir') ?? '').trim() || null,
+      },
+    });
+    toast('Setările de backup au fost salvate.', 'ok');
+    navigate('/admin/stare');
+  } catch (err) {
+    toast(errorMessage(err), 'error');
+  }
+}
+
+const RETENTION_CHOICES: [number | null, string][] = [
+  [null, 'Pentru totdeauna'],
+  [365, '1 an'],
+  [180, '6 luni'],
+  [90, '3 luni'],
+  [30, '30 de zile'],
+];
+
+function retentionCard(a: ArchiveInfo): HTMLElement {
+  const current = a.settings.retentionDays;
+  const select = h(
+    'select',
+    { name: 'retention', 'aria-label': 'Cât timp se păstrează mesajele' },
+    RETENTION_CHOICES.map(([days, label]) => h('option', { value: days === null ? '' : String(days), selected: days === current }, label)),
+  );
+  if (current !== null && !RETENTION_CHOICES.some(([d]) => d === current)) {
+    select.append(h('option', { value: String(current), selected: true }, `${current} zile`));
+  }
+  const save = h('button', { class: 'btn', type: 'button' }, 'Aplică');
+  save.addEventListener(
+    'click',
+    busy(save, async () => {
+      const days = select.value === '' ? null : Number(select.value);
+      if (days !== null) {
+        const p = await adminRequest<{ messages: number; files: number; fileBytes: number }>('GET', `/api/admin/archive/retention-preview?days=${days}`);
+        const ok = await dialog({
+          title: 'Ștergi istoricul vechi?',
+          body: [
+            h('p', null, `Se vor șterge definitiv ${p.messages} mesaje și ${p.files} fișiere (${formatBytes(p.fileBytes)}) mai vechi de ${days} zile.`),
+            h('p', null, 'De acum înainte, ce depășește această vârstă va fi șters automat. Backup-urile existente nu sunt afectate.'),
+          ],
+          confirmLabel: 'Aplică și șterge',
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      const res = await adminRequest<{ retentionApplied: { messages: number } }>('PUT', '/api/admin/archive/settings', { retentionDays: days });
+      toast(days === null ? 'Mesajele se păstrează pentru totdeauna.' : `Politică aplicată: ${res.retentionApplied.messages} mesaje șterse.`, 'ok');
+      navigate('/admin/stare');
+    }),
+  );
+  return card(
+    h('h2', null, 'Păstrarea istoricului'),
+    h('p', { class: 'muted' }, 'Mesajele și fișierele mai vechi decât perioada aleasă sunt șterse automat. Apelurile nu sunt înregistrate niciodată.'),
+    h('div', { class: 'inline-form' }, select, save),
+  );
+}
+
+function integrityCard(): HTMLElement {
+  const out = h('div', { 'aria-live': 'polite' });
+  const btn = h('button', { class: 'btn', type: 'button' }, 'Verifică integritatea arhivei');
+  btn.addEventListener(
+    'click',
+    busy(btn, async () => {
+      clear(out);
+      const r = await adminRequest<{ ok: boolean; database: { ok: boolean; details: string[] }; files: { checked: number; missing: string[]; corrupted: string[] } }>(
+        'POST',
+        '/api/admin/archive/verify',
+      );
+      out.append(
+        h(
+          'p',
+          { class: r.ok ? 'note-ok' : 'form-error', 'data-testid': 'integrity-result' },
+          r.ok
+            ? `Totul este în regulă: baza de date și ${r.files.checked} fișiere verificate (SHA-256).`
+            : `Probleme: ${[!r.database.ok ? 'baza de date' : '', r.files.missing.length ? `${r.files.missing.length} fișiere lipsă` : '', r.files.corrupted.length ? `${r.files.corrupted.length} fișiere corupte` : ''].filter(Boolean).join(', ')}. Restaurează din backup.`,
+        ),
+      );
+    }),
+  );
+  return card(h('h2', null, 'Integritate'), h('p', { class: 'muted' }, 'Recalculează amprentele tuturor fișierelor și verifică baza de date.'), btn, out);
+}
+
+function restoreCard(a: ArchiveInfo): HTMLElement {
+  return card(
+    h('h2', null, 'Restaurare'),
+    h('p', null, 'Restaurarea înlocuiește arhiva, deci se face cu serverul oprit, pe laptop:'),
+    h(
+      'ol',
+      { class: 'steps' },
+      h('li', null, 'Oprește serverul (Ctrl+C în fereastra lui).'),
+      h('li', null, 'Listează backup-urile: ', h('code', null, 'npm run backup -- --list')),
+      h('li', null, 'Restaurează: ', h('code', null, `npm run restore -- ${a.backups[0]?.name ?? 'nexus-AAAALLZZ-…'}`)),
+      h('li', null, 'Pornește serverul din nou.'),
+    ),
+    h('p', { class: 'muted small' }, 'Arhiva curentă nu este ștearsă: este redenumită „…inainte-de-restaurare-…”. Backup-ul este verificat complet înainte de restaurare. În aplicația Windows (M6) va exista un buton.'),
   );
 }
 

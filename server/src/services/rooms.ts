@@ -4,6 +4,7 @@ import { dummyPasswordHash, hashPassword, verifyPassword } from '../crypto/passw
 import { newRoomCode } from '../crypto/tokens.ts';
 import { HttpError, notFound } from '../errors.ts';
 import { audit } from './audit.ts';
+import { storageKeysForRoom } from './files.ts';
 import { createSession, revokeSessions, type IssuedSession } from './sessions.ts';
 import type { Ctx } from '../context.ts';
 
@@ -127,16 +128,21 @@ export async function updateRoom(
   });
 }
 
-/** Ștergere definitivă: camera, participanții, sesiunile și mesajele ei. */
-export function deleteRoom(ctx: Ctx, roomId: string, confirmCode: string, actor: string): void {
-  transaction(ctx.db, () => {
+/**
+ * Ștergere definitivă: camera, participanții, sesiunile, mesajele și fișierele ei.
+ * Întoarce cheile fișierelor de pe disc, care se șterg după confirmarea tranzacției.
+ */
+export function deleteRoom(ctx: Ctx, roomId: string, confirmCode: string, actor: string): string[] {
+  return transaction(ctx.db, () => {
     const row = getRow<RoomRow>(ctx.db, 'SELECT * FROM rooms WHERE id = ?', roomId);
     if (!row) throw notFound('Camera nu există.');
     if (confirmCode !== row.code) {
       throw new HttpError(400, 'confirmation_mismatch', 'Pentru ștergere, confirmă introducând codul camerei.');
     }
+    const keys = storageKeysForRoom(ctx, roomId);
     ctx.db.prepare('DELETE FROM rooms WHERE id = ?').run(roomId);
-    audit(ctx, actor, 'room.deleted', roomId, { name: row.name });
+    audit(ctx, actor, 'room.deleted', roomId, { name: row.name, files: keys.length });
+    return keys;
   });
 }
 

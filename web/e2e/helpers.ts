@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
-const dataDir = fileURLToPath(new URL('../.e2e-data', import.meta.url));
+const dataDir = fileURLToPath(new URL('../.e2e-data/data', import.meta.url));
 const cli = fileURLToPath(new URL('../../server/src/cli/admin-code.ts', import.meta.url));
 
 /** Cod de înrolare emis direct din arhiva locală, exact ca `npm run admin:code` pe laptop. */

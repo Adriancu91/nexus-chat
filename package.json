@@ -17,6 +17,8 @@
     "typecheck": "npm run typecheck --workspaces",
     "test": "npm test -w server",
     "test:e2e": "npm run test:e2e -w web",
-    "admin:code": "npm run admin:code -w server"
+    "admin:code": "npm run admin:code -w server",
+    "backup": "npm run backup -w server --",
+    "restore": "npm run restore -w server --"
   }
 }

@@ -61,13 +61,15 @@ export function createApp(config: Config, now: () => number = Date.now): App {
       if (!(err instanceof HttpError)) console.error(`[http] ${req.method} ${req.url?.split('?')[0]}:`, err);
       const headers: Record<string, string> = { ...(cors ?? {}) };
       if (e.retryAfterMs) headers['Retry-After'] = String(Math.ceil(e.retryAfterMs / 1000));
-      if (e.status === 413) headers.Connection = 'close';
+      // Corpul cererii (ex. un upload refuzat) nu a fost citit: conexiunea nu poate fi refolosită.
+      if (!req.readableEnded) headers.Connection = 'close';
       if (!res.headersSent) sendReply(res, { status: e.status, body: { error: { code: e.code, message: e.message } } }, headers);
       else res.destroy();
     }
   });
   server.headersTimeout = 15_000;
-  server.requestTimeout = 30_000;
+  // Generos pentru upload-uri mari pe date mobile; headersTimeout rămâne scurt (anti-slowloris).
+  server.requestTimeout = 30 * 60_000;
   server.on('upgrade', (req, socket, head) => hub.handleUpgrade(req, socket, head));
 
   return {

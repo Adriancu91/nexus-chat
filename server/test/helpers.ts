@@ -107,6 +107,35 @@ export async function joinRoom(srv: TestServer, code: string, password: string, 
   return api(srv.base, 'POST', '/api/rooms/join', { body: { code, password, displayName } });
 }
 
+export async function uploadFile(
+  base: string,
+  token: string,
+  roomId: string,
+  name: string,
+  data: Buffer | string,
+  opts: { caption?: string; contentType?: string } = {},
+): Promise<ApiResult> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': opts.contentType ?? 'application/octet-stream',
+    'X-File-Name': encodeURIComponent(name),
+  };
+  if (opts.caption) headers['X-Caption'] = encodeURIComponent(opts.caption);
+  const res = await fetch(`${base}/api/rooms/${roomId}/files`, { method: 'POST', headers, body: typeof data === 'string' ? Buffer.from(data) : data });
+  const text = await res.text();
+  return { status: res.status, body: text ? JSON.parse(text) : undefined, headers: res.headers };
+}
+
+export async function download(base: string, fileId: string, token?: string, query = ''): Promise<{ status: number; data: Buffer; headers: Headers }> {
+  const res = await fetch(`${base}/api/files/${fileId}${query}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  return { status: res.status, data: Buffer.from(await res.arrayBuffer()), headers: res.headers };
+}
+
+export const PNG_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 export class WsClient {
   readonly ws: WebSocket;
   private readonly buffer: any[] = [];

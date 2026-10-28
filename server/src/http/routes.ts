@@ -4,8 +4,28 @@ import { getRow } from '../db/database.ts';
 import { badRequest, HttpError, tooManyRequests, unauthorized } from '../errors.ts';
 import { actorOf, requireAdmin, requirePrincipal, requireRoomAccess } from '../services/access.ts';
 import { AdminAuth, enrollDevice, issueEnrollmentCode, listDevices, revokeDevice } from '../services/admin.ts';
-import { listAudit } from '../services/audit.ts';
-import { listMessages } from '../services/messages.ts';
+import { applyRetention, retentionPreview, verifyArchive } from '../services/archive.ts';
+import { audit, listAudit } from '../services/audit.ts';
+import {
+  backupRoot,
+  createBackup,
+  defaultBackupRoot,
+  isValidBackupName,
+  listBackups,
+  verifyBackup,
+} from '../services/backup.ts';
+import {
+  commitUpload,
+  contentDisposition,
+  freeDiskBytes,
+  getFile,
+  listRoomFiles,
+  receiveUpload,
+  removeStoredFiles,
+  storedFilePath,
+} from '../services/files.ts';
+import { listMessages, searchMessages } from '../services/messages.ts';
+import { getArchiveSettings, getBackupStatus, setArchiveSettings, type ArchiveSettings } from '../services/settings.ts';
 import { RateLimiter } from '../services/rateLimiter.ts';
 import {
   createRoom,
@@ -17,8 +37,8 @@ import {
   revokeParticipant,
   updateRoom,
 } from '../services/rooms.ts';
-import { publicPrincipal, revokeSessions } from '../services/sessions.ts';
-import { asObject, cleanLabel, isUuid, optionalBool, optionalInt, password, token } from '../validation.ts';
+import { authenticateHash, publicPrincipal, revokeSessions } from '../services/sessions.ts';
+import { asObject, cleanLabel, cleanMessageBody, isUuid, optionalBool, optionalInt, password, token } from '../validation.ts';
 import { created, noContent, ok } from './http.ts';
 import { Router, type RequestContext } from './router.ts';
 import type { Hub } from '../ws/hub.ts';
@@ -47,6 +67,7 @@ export function buildRouter(ctx: Ctx, hub: Hub): Router {
   const joinRoomLimiter = new RateLimiter(limits.joinFailuresPerRoom, limits.joinWindowMs, ctx.now);
   const adminFailLimiter = new RateLimiter(limits.adminFailuresPerIp, limits.adminWindowMs, ctx.now);
   const adminChallengeLimiter = new RateLimiter(limits.adminChallengesPerIp, limits.adminWindowMs, ctx.now);
+  const uploadLimiter = new RateLimiter(limits.uploadsPerWindow, limits.uploadWindowMs, ctx.now);
   const startedAt = ctx.now();
 
   const guardAdminFailures = (ip: string) => {
@@ -188,8 +209,9 @@ export function buildRouter(ctx: Ctx, hub: Hub): Router {
   router.add('DELETE', '/api/admin/rooms/:roomId', async (rc) => {
     const admin = requireAdmin(rc.principal);
     const body = asObject(await rc.body());
-    deleteRoom(ctx, uuidParam(rc, 'roomId'), token(body, 'confirmCode', 32), actorOf(admin));
+    const keys = deleteRoom(ctx, uuidParam(rc, 'roomId'), token(body, 'confirmCode', 32), actorOf(admin));
     hub.disconnectInvalid();
+    await removeStoredFiles(ctx.config, keys);
     return noContent();
   });
 
@@ -233,9 +255,170 @@ export function buildRouter(ctx: Ctx, hub: Hub): Router {
       diskFreeBytes,
       rooms: count('rooms'),
       messages: count('messages'),
+      files: count('files'),
+      filesBytes: getRow<{ b: number | null }>(ctx.db, 'SELECT SUM(size) AS b FROM files')!.b ?? 0,
       wsConnections: hub.connectionCount,
     });
   });
 
+  // ---- fișiere ----
+  router.add('POST', '/api/rooms/:roomId/files', async (rc) => {
+    const principal = requirePrincipal(rc.principal);
+    const room = requireRoomAccess(ctx, principal, rc.params.roomId, { write: true });
+    if (!(rc.req.headers['content-type'] ?? '').toLowerCase().startsWith('application/octet-stream')) {
+      throw new HttpError(415, 'unsupported_media_type', 'Fișierul trebuie trimis ca application/octet-stream.');
+    }
+    const rawName = decodeHeader(rc.req.headers['x-file-name']);
+    if (!rawName) throw badRequest('missing_file_name', 'Numele fișierului lipsește.');
+    const captionRaw = decodeHeader(rc.req.headers['x-caption'])?.trim();
+    const caption = captionRaw ? cleanMessageBody(captionRaw, limits.messageMaxChars) : '';
+    if (!uploadLimiter.hit(principal.sessionId)) throw tooManyRequests(uploadLimiter.blockedFor(principal.sessionId));
+
+    const upload = await receiveUpload(ctx, rc.req);
+    // Transferul poate dura: accesul este re-verificat înainte de salvare.
+    const fresh = authenticateHash(ctx, principal.tokenHash);
+    try {
+      requireRoomAccess(ctx, fresh, room.id, { write: true });
+    } catch (err) {
+      await fs.promises.rm(upload.tmpPath, { force: true });
+      throw err;
+    }
+    const message = await commitUpload(ctx, fresh!, room.id, upload, rawName, caption);
+    hub.broadcast(room.id, { type: 'message', message });
+    return created({ message });
+  });
+
+  router.add('GET', '/api/files/:fileId', (rc) => {
+    const file = getFile(ctx, uuidParam(rc, 'fileId'));
+    if (!file) throw new HttpError(404, 'not_found', 'Fișierul nu există.');
+    requireRoomAccess(ctx, rc.principal, file.roomId, { write: false });
+    const inline = file.inlineSafe && rc.query.get('download') !== '1';
+    return {
+      status: 200,
+      file: {
+        path: storedFilePath(ctx.config, file.storageKey),
+        size: file.size,
+        headers: {
+          // Doar imaginile verificate primesc tipul real; restul nu pot fi interpretate de browser.
+          'Content-Type': inline ? file.mime : 'application/octet-stream',
+          'Content-Disposition': contentDisposition(inline ? 'inline' : 'attachment', file.name),
+          'Content-Security-Policy': "default-src 'none'; sandbox",
+          'Cache-Control': 'private, no-store',
+          'Access-Control-Expose-Headers': 'Content-Disposition',
+        },
+      },
+    };
+  });
+
+  router.add('GET', '/api/rooms/:roomId/files', (rc) => {
+    const room = requireRoomAccess(ctx, rc.principal, rc.params.roomId, { write: false });
+    const limit = intParam(rc.query, 'limit', 1, 200) ?? 100;
+    return ok({ roomId: room.id, ...listRoomFiles(ctx, room.id, limit, intParam(rc.query, 'beforeSeq', 0, Number.MAX_SAFE_INTEGER)) });
+  });
+
+  router.add('GET', '/api/rooms/:roomId/search', (rc) => {
+    const room = requireRoomAccess(ctx, rc.principal, rc.params.roomId, { write: false });
+    const q = rc.query.get('q') ?? '';
+    if (q.trim().length === 0 || q.length > 200) throw badRequest('invalid_query', 'Introdu un text de căutat (maxim 200 de caractere).');
+    const limit = intParam(rc.query, 'limit', 1, 100) ?? 50;
+    return ok({ roomId: room.id, results: searchMessages(ctx, room.id, q, limit) });
+  });
+
+  // ---- arhivă, retenție, backup (doar administratorul) ----
+  router.add('GET', '/api/admin/archive', async (rc) => {
+    requireAdmin(rc.principal);
+    const root = backupRoot(ctx);
+    return ok({
+      settings: getArchiveSettings(ctx),
+      backupDir: root,
+      defaultBackupDir: defaultBackupRoot(ctx.config.dataDir),
+      backups: await listBackups(root),
+      backupStatus: getBackupStatus(ctx),
+      dataFreeBytes: await freeDiskBytes(ctx.config.dataDir),
+      backupFreeBytes: await freeDiskBytes(fs.existsSync(root) ? root : path.dirname(root)),
+      maxFileBytes: limits.maxFileBytes,
+    });
+  });
+
+  router.add('PUT', '/api/admin/archive/settings', async (rc) => {
+    const admin = requireAdmin(rc.principal);
+    const body = asObject(await rc.body());
+    const current = getArchiveSettings(ctx);
+    const next: ArchiveSettings = { retentionDays: current.retentionDays, backup: { ...current.backup } };
+    if ('retentionDays' in body) {
+      next.retentionDays = body.retentionDays === null ? null : optionalInt(body, 'retentionDays', 1, 36_500)!;
+    }
+    if (body.backup !== undefined) {
+      const b = asObject(body.backup);
+      next.backup.enabled = optionalBool(b, 'enabled') ?? next.backup.enabled;
+      next.backup.intervalHours = optionalInt(b, 'intervalHours', 1, 720) ?? next.backup.intervalHours;
+      next.backup.keep = optionalInt(b, 'keep', 1, 100) ?? next.backup.keep;
+      if ('dir' in b) next.backup.dir = b.dir === null || b.dir === '' ? null : await validateBackupDir(ctx, b.dir);
+    }
+    setArchiveSettings(ctx, next);
+    audit(ctx, actorOf(admin), 'archive.settings_updated', undefined, { retentionDays: next.retentionDays, backup: next.backup });
+    const retention = await applyRetention(ctx, actorOf(admin));
+    return ok({ settings: next, retentionApplied: retention });
+  });
+
+  router.add('GET', '/api/admin/archive/retention-preview', (rc) => {
+    requireAdmin(rc.principal);
+    const days = intParam(rc.query, 'days', 1, 36_500);
+    if (days === undefined) throw badRequest('invalid_query', 'Parametrul „days” lipsește.');
+    return ok(retentionPreview(ctx, days));
+  });
+
+  router.add('POST', '/api/admin/archive/backups', async (rc) => {
+    const admin = requireAdmin(rc.principal);
+    return created({ backup: await createBackup(ctx, actorOf(admin)) });
+  });
+
+  router.add('POST', '/api/admin/archive/backups/:name/verify', async (rc) => {
+    const admin = requireAdmin(rc.principal);
+    const name = rc.params.name ?? '';
+    if (!isValidBackupName(name)) throw new HttpError(404, 'not_found', 'Backup inexistent.');
+    const result = await verifyBackup(backupRoot(ctx), name);
+    audit(ctx, actorOf(admin), 'backup.verified', name, { ok: result.ok, problems: result.problems.length });
+    return ok(result);
+  });
+
+  router.add('POST', '/api/admin/archive/verify', async (rc) => {
+    requireAdmin(rc.principal);
+    return ok(await verifyArchive(ctx));
+  });
+
   return router;
+}
+
+function decodeHeader(value: string | string[] | undefined): string | undefined {
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+  if (value.length > 2048) throw badRequest('invalid_header', 'Antet prea lung.');
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    throw badRequest('invalid_header', 'Antet codificat greșit.');
+  }
+}
+
+/** Folderul de backup: cale absolută, în afara arhivei (altfel backup-ul s-ar copia pe sine). */
+async function validateBackupDir(ctx: Ctx, value: unknown): Promise<string> {
+  if (typeof value !== 'string' || value.length > 500 || !path.isAbsolute(value)) {
+    throw badRequest('invalid_backup_dir', 'Folderul de backup trebuie să fie o cale completă, de ex. D:\\NexusBackup.');
+  }
+  const dir = path.resolve(value);
+  const data = path.resolve(ctx.config.dataDir);
+  const inside = (a: string, b: string) => {
+    const rel = path.relative(b, a);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  };
+  if (inside(dir, data) || inside(data, dir)) {
+    throw badRequest('invalid_backup_dir', 'Folderul de backup nu poate fi în interiorul arhivei (sau invers).');
+  }
+  try {
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.access(dir, fs.constants.W_OK);
+  } catch {
+    throw badRequest('invalid_backup_dir', 'Folderul de backup nu poate fi creat sau nu permite scrierea.');
+  }
+  return dir;
 }

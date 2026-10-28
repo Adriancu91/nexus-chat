@@ -790,3 +790,181 @@ textarea:focus {
     transition: none;
   }
 }
+
+/* ---- fișiere ---- */
+.file-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: min(240px, 60vw);
+  padding: 6px 4px 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.file-icon {
+  display: inline-flex;
+  color: var(--primary);
+}
+.file-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.file-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.file-size {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.file-dl,
+.file-card .icon-btn {
+  color: var(--primary);
+}
+.thumb-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  border-radius: 6px;
+  overflow: hidden;
+  display: block;
+}
+.thumb {
+  display: block;
+  max-width: min(320px, 64vw);
+  max-height: 320px;
+  min-width: 80px;
+  min-height: 60px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.lightbox-img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+.dialog:has(.lightbox-img) {
+  width: min(960px, calc(100vw - 32px));
+}
+.bubble progress {
+  width: 100%;
+  height: 6px;
+  margin-top: 6px;
+  accent-color: var(--accent);
+}
+.attach-btn {
+  color: var(--muted);
+  flex: none;
+}
+.attach-btn:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.drop-target {
+  outline: 3px dashed var(--accent);
+  outline-offset: -8px;
+}
+.msg-flash .bubble {
+  animation: flash 1.6s ease-out;
+}
+@keyframes flash {
+  0%,
+  40% {
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+  100% {
+    box-shadow: var(--bubble-shadow);
+  }
+}
+
+/* ---- panou lateral: fișiere, căutare ---- */
+.side-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+}
+.file-list,
+.result-list,
+.backup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.file-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.result:hover {
+  background: var(--surface-2);
+}
+.result-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.result-snippet {
+  overflow-wrap: anywhere;
+}
+mark {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+/* ---- administrare arhivă ---- */
+.backup-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.backup-list {
+  margin-top: 12px;
+}
+.note-warn {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 0.9rem;
+}
+.note-ok {
+  color: var(--accent);
+  font-weight: 600;
+}
+select {
+  appearance: auto;
+  flex: 1 1 200px;
+}
+.card code {
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
