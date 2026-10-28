@@ -27,7 +27,7 @@ export default defineConfig({
         channel,
         // Cameră și microfon simulate pentru testele de apel.
         permissions: ['camera', 'microphone'],
-        launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] },
+        launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--allow-loopback-in-peer-connection'] },
       },
       testIgnore: /mobile\.spec\.ts/,
     },
@@ -38,6 +38,14 @@ export default defineConfig({
       command: 'node e2e/start-backend.mjs',
       url: `http://127.0.0.1:${BACKEND_PORT}/api/health`,
       env: { NEXUS_ALLOWED_ORIGINS: WEB_ORIGIN, E2E_BACKEND_PORT: String(BACKEND_PORT) },
+      reuseExistingServer: false,
+      stdout: 'ignore',
+    },
+    {
+      // Al doilea backend: releu TURN activ, pentru testul apelurilor prin releu.
+      command: 'node e2e/start-backend.mjs',
+      url: `http://127.0.0.1:${BACKEND_PORT + 1}/api/health`,
+      env: { NEXUS_ALLOWED_ORIGINS: WEB_ORIGIN, E2E_BACKEND_PORT: String(BACKEND_PORT + 1), E2E_VARIANT: 'relay' },
       reuseExistingServer: false,
       stdout: 'ignore',
     },

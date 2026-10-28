@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import dgram from 'node:dgram';
+import { networkInterfaces } from 'node:os';
 import { promisify } from 'node:util';
 
 /**
@@ -84,6 +85,25 @@ export async function defaultGateway(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Adresa IPv4 a calculatorului în rețeaua locală (interfața din aceeași subrețea cu routerul).
+ * Folosită ca adresă a serverului media când media trece prin releul local: nu 127.0.0.1
+ * (candidații de loopback sunt ignorați) și nu adresa Tailscale (traficul spre ea nu revine local).
+ */
+export function lanIpv4(gateway: string | null): string | null {
+  const candidates = Object.values(networkInterfaces())
+    .flat()
+    .filter((i): i is NonNullable<typeof i> => !!i && i.family === 'IPv4' && !i.internal)
+    .map((i) => i.address)
+    .filter((a) => !/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a) && !a.startsWith('169.254.'));
+  if (gateway) {
+    const prefix = gateway.split('.').slice(0, 3).join('.') + '.';
+    const same = candidates.find((a) => a.startsWith(prefix));
+    if (same) return same;
+  }
+  return candidates.find((a) => !a.startsWith('192.168.137.')) ?? null;
 }
 
 export interface PortMapperStatus {

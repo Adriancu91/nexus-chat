@@ -19,6 +19,8 @@ export interface CallOptions {
   roomName: string;
   token: () => Promise<string>;
   withVideo: boolean;
+  /** Forțează media prin releul TURN al serverului (fără încercări directe care ar eșua). */
+  relay: boolean;
   onClosed: () => void;
 }
 
@@ -188,7 +190,10 @@ export async function openCall(opts: CallOptions): Promise<void> {
   // ---- conectare ----
   try {
     const { token } = await request<{ token: string }>('POST', `/api/rooms/${opts.roomId}/call/token`, { token: await opts.token() });
-    await room.connect(liveKitUrl(), token, { autoSubscribe: true });
+    await room.connect(liveKitUrl(), token, {
+      autoSubscribe: true,
+      ...(opts.relay ? { rtcConfig: { iceTransportPolicy: 'relay' as const } } : {}),
+    });
     room.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub: TrackPublication) => pub.track && attachAudio(pub.track as RemoteTrack)));
     render();
     await room.localParticipant.setMicrophoneEnabled(true).catch((err: unknown) => toast(mediaError(err), 'error'));

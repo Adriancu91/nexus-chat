@@ -64,6 +64,12 @@ export interface CallsConfig {
   /** Adresa routerului; null = gateway-ul implicit al sistemului. */
   gateway: string | null;
   natPmpPort: number;
+  /**
+   * Releu TURN (LiveKit încorporat) pentru rețele în care media nu poate ajunge direct:
+   * domain = adresa publică (ex. Tailscale Funnel, care face TLS și trimite TCP simplu local
+   * pe tlsPort). udpPort = TURN pe UDP, doar pentru teste locale.
+   */
+  turn: { domain: string | null; tlsPort: number; udpPort: number | null };
   /** Cât timp e valabil biletul de intrare în apel (conexiunea rămâne după aceea). */
   tokenTtlSec: number;
 }
@@ -211,6 +217,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Conf
       portMapping: fc.portMapping === 'natpmp' ? 'natpmp' : 'none',
       gateway: typeof fc.gateway === 'string' && fc.gateway ? fc.gateway : null,
       natPmpPort: typeof fc.natPmpPort === 'number' ? fc.natPmpPort : 5351,
+      turn: {
+        domain: typeof fc.turn?.domain === 'string' && fc.turn.domain ? fc.turn.domain : null,
+        tlsPort: typeof fc.turn?.tlsPort === 'number' ? fc.turn.tlsPort : 8443,
+        udpPort: typeof fc.turn?.udpPort === 'number' ? fc.turn.udpPort : null,
+      },
       tokenTtlSec: 10 * 60,
     },
   };

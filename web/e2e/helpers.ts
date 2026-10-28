@@ -6,16 +6,16 @@ const dataDir = fileURLToPath(new URL('../.e2e-data/data', import.meta.url));
 const cli = fileURLToPath(new URL('../../server/src/cli/admin-code.ts', import.meta.url));
 
 /** Cod de înrolare emis direct din arhiva locală, exact ca `npm run admin:code` pe laptop. */
-export function issueAdminCode(): string {
-  const out = execFileSync(process.execPath, [cli, '--data-dir', dataDir], { encoding: 'utf8' });
+export function issueAdminCode(dir = dataDir): string {
+  const out = execFileSync(process.execPath, [cli, '--data-dir', dir], { encoding: 'utf8' });
   const m = /([0-9A-Z]{5}(?:-[0-9A-Z]{5}){3})/.exec(out);
   if (!m) throw new Error('Nu am găsit codul în ieșirea CLI: ' + out);
   return m[1]!;
 }
 
-export async function enrollAdmin(page: Page, label = 'Laptop test'): Promise<void> {
+export async function enrollAdmin(page: Page, label = 'Laptop test', dir?: string): Promise<void> {
   await page.goto('/#/admin');
-  await page.getByLabel('Cod de înrolare').fill(issueAdminCode());
+  await page.getByLabel('Cod de înrolare').fill(issueAdminCode(dir));
   await page.getByLabel('Numele dispozitivului').fill(label);
   await page.getByRole('button', { name: 'Înregistrează acest dispozitiv' }).click();
   await expect(page.getByRole('link', { name: 'Camere' })).toBeVisible();

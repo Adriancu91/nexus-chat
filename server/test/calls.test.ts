@@ -44,6 +44,22 @@ describe('JWT pentru LiveKit', () => {
     assert.match(yaml, /bind_addresses:\n {2}- 127\.0\.0\.1/);
     assert.match(yaml, /max_participants: 6/);
     assert.doesNotMatch(yaml, /egress|recording/i);
+    assert.doesNotMatch(yaml, /^turn:/m, 'fără releu dacă nu e configurat');
+  });
+  test('releul prin Tailscale Funnel: TLS făcut în față (external_tls), port public 8443', () => {
+    const cfg = loadConfig({}, { calls: { turn: { domain: 'gazda.tail0000.ts.net', tlsPort: 8443, udpPort: null }, nodeIp: '192.168.0.151' } });
+    const yaml = liveKitYaml(cfg.calls, { apiKey: 'k', apiSecret: 'secret' }, 'http://127.0.0.1:1/x');
+    assert.match(yaml, /turn:\n {2}enabled: true\n {2}domain: gazda\.tail0000\.ts\.net\n {2}tls_port: 8443\n {2}external_tls: true/);
+    assert.doesNotMatch(yaml, /udp_port: 3478/);
+    assert.match(yaml, /node_ip: 192\.168\.0\.151/);
+  });
+  test('adresa locală pentru releu: din subrețeaua routerului, niciodată Tailscale sau loopback', async () => {
+    const { lanIpv4 } = await import('../src/calls/natpmp.ts');
+    const ip = lanIpv4(null);
+    if (ip) {
+      assert.doesNotMatch(ip, /^127\./);
+      assert.doesNotMatch(ip, /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./);
+    }
   });
 });
 
@@ -57,7 +73,7 @@ describe('apeluri fără server media configurat', () => {
       assert.equal(res.status, 503);
       assert.equal(res.body.error.code, 'calls_unavailable');
       const state = await api(srv.base, 'GET', `/api/rooms/${room.id}/call`, { token: admin.token });
-      assert.deepEqual(state.body, { roomId: room.id, available: false, participants: [] });
+      assert.deepEqual(state.body, { roomId: room.id, available: false, relay: false, participants: [] });
     } finally {
       await srv.stop();
     }
@@ -107,7 +123,7 @@ describe('apeluri cu LiveKit real', { skip: HAS_LIVEKIT ? false : 'livekit-serve
     const ws = await WsClient.authed(srv.wsUrl, ana.token);
     ws.send({ type: 'subscribe', roomId: roomA.room.id });
     const initial = await ws.next((m) => m.type === 'call');
-    assert.deepEqual(initial, { type: 'call', roomId: roomA.room.id, available: true, participants: [] });
+    assert.deepEqual(initial, { type: 'call', roomId: roomA.room.id, available: true, relay: false, participants: [] });
 
     const body = JSON.stringify({ event: 'participant_joined', room: { name: roomA.room.id } });
     const forged = await fetch(`${srv.base}/internal/livekit/webhook`, { method: 'POST', body, headers: { Authorization: 'Bearer x.y.z' } });

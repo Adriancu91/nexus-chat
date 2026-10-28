@@ -41,6 +41,14 @@ export function liveKitYaml(calls: CallsConfig, keys: LiveKitKeys, webhookUrl: s
     '  use_external_ip: false',
   ];
   if (calls.nodeIp) lines.push(`  node_ip: ${calls.nodeIp}`);
+  if (calls.turn.domain || calls.turn.udpPort) {
+    // Releu TURN încorporat. Cu domain: TLS este făcut în fața lui (Tailscale Funnel
+    // --tls-terminated-tcp), iar LiveKit primește TCP simplu pe tlsPort, doar local.
+    lines.push('turn:', '  enabled: true', `  domain: ${calls.turn.domain ?? '127.0.0.1'}`);
+    if (calls.turn.domain) lines.push(`  tls_port: ${calls.turn.tlsPort}`, '  external_tls: true');
+    if (calls.turn.udpPort) lines.push(`  udp_port: ${calls.turn.udpPort}`);
+    lines.push('  relay_range_start: 30000', '  relay_range_end: 30200');
+  }
   lines.push(
     'keys:',
     `  ${keys.apiKey}: ${keys.apiSecret}`,

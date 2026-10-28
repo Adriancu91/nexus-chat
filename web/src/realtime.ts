@@ -15,6 +15,8 @@ export interface PresenceEntry {
 
 export interface CallState {
   available: boolean;
+  /** Media trece prin releul TURN al serverului (drumul direct nu e disponibil). */
+  relay: boolean;
   participants: { name: string; kind: 'admin' | 'participant' }[];
 }
 
@@ -206,6 +208,7 @@ export class RoomConnection {
       case 'call':
         return this.events.call({
           available: Boolean(msg.available),
+          relay: Boolean(msg.relay),
           participants: (msg.participants as CallState['participants']) ?? [],
         });
       case 'presence':

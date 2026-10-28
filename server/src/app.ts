@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import type { DatabaseSync } from 'node:sqlite';
 import { CallService } from './calls/calls.ts';
 import { ensureLiveKitKeys, LiveKitProcess, liveKitYaml, RoomServiceClient } from './calls/livekit.ts';
-import { defaultGateway, PortMapper } from './calls/natpmp.ts';
+import { defaultGateway, lanIpv4, PortMapper } from './calls/natpmp.ts';
 import { isRtcPath, proxyRtcHttp, proxyRtcUpgrade } from './calls/proxy.ts';
 import { openDatabase } from './db/database.ts';
 import { HttpError } from './errors.ts';
@@ -182,6 +182,11 @@ export function createApp(config: Config, now: () => number = Date.now): App {
           }
         }
         if (mapperError) console.error(`[apeluri] porturile media NU au fost deschise în router: ${mapperError}. Apelurile vor merge doar în rețeaua locală.`);
+      }
+      // Releu fără drum direct: serverul media trebuie să anunțe adresa locală reală, ca releul
+      // (pe același calculator) să-i poată trimite pachetele.
+      if (!nodeIp && !mapper && config.calls.turn.domain) {
+        nodeIp = lanIpv4(config.calls.gateway ?? (await defaultGateway()));
       }
       writeYaml(nodeIp);
       livekit = new LiveKitProcess({

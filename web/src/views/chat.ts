@@ -75,7 +75,7 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
   const main = h('main', { class: 'chat-main' }, scroller, closedNote, composer);
 
   // ---- apel ----
-  let callState: CallState = { available: false, participants: [] };
+  let callState: CallState = { available: false, relay: false, participants: [] };
   let inCall = false;
   const callBtn = iconButton('phone', 'Apel audio-video', () => void startCall());
   callBtn.hidden = true;
@@ -114,6 +114,7 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
       roomName: title.textContent ?? '',
       token,
       withVideo: data.get('mode') === 'video',
+      relay: callState.relay,
       onClosed: () => {
         inCall = false;
         renderCallBanner();

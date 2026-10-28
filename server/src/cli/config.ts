@@ -20,6 +20,8 @@ const { values } = parseArgs({
     'no-trust-proxy': { type: 'boolean' },
     port: { type: 'string' },
     'port-mapping': { type: 'string' },
+    'relay-domain': { type: 'string' },
+    'no-relay': { type: 'boolean' },
   },
 });
 
@@ -62,6 +64,16 @@ if (values['port-mapping']) {
   next.calls = { ...next.calls, portMapping: mode };
   changed = true;
 }
+if (values['relay-domain']) {
+  const domain = values['relay-domain'].toLowerCase();
+  if (!/^[a-z0-9.-]{3,253}$/.test(domain)) throw new Error('Domeniu invalid pentru releu.');
+  next.calls = { ...next.calls, turn: { tlsPort: 8443, udpPort: null, ...next.calls?.turn, domain } };
+  changed = true;
+}
+if (values['no-relay']) {
+  next.calls = { ...next.calls, turn: { tlsPort: 8443, udpPort: null, ...next.calls?.turn, domain: null } };
+  changed = true;
+}
 
 if (changed) {
   writeConfigFile(file, next);
@@ -75,5 +87,6 @@ console.log(`IP client din antet: ${effective.trustProxyHeader ?? 'nu (adresa co
 console.log(`Limită fișier: ${Math.round(effective.limits.maxFileBytes / 1048576)} MB`);
 console.log(
   `Apeluri: ${effective.calls.livekitBinary ? `LiveKit ${effective.calls.livekitBinary}` : 'dezactivate (livekit-server lipsește)'}; ` +
-    `porturi media UDP ${effective.calls.rtcUdpPort} / TCP ${effective.calls.rtcTcpPort}; deschidere automată în router: ${effective.calls.portMapping}`,
+    `porturi media UDP ${effective.calls.rtcUdpPort} / TCP ${effective.calls.rtcTcpPort}; deschidere automată în router: ${effective.calls.portMapping}; ` +
+    `releu TURN: ${effective.calls.turn.domain ? `${effective.calls.turn.domain}:${effective.calls.turn.tlsPort} (TLS prin Tailscale Funnel)` : 'nu'}`,
 );

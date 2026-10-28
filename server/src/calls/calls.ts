@@ -8,6 +8,8 @@ export interface CallState {
   roomId: string;
   /** false = serverul nu are apelurile configurate (butonul de apel nu se afișează). */
   available: boolean;
+  /** true = media trebuie să treacă prin releul TURN (drumul direct nu e disponibil). */
+  relay: boolean;
   participants: { name: string; kind: 'admin' | 'participant' }[];
 }
 
@@ -70,18 +72,26 @@ export class CallService {
   }
 
   async state(roomId: string): Promise<CallState> {
-    if (!this.rooms) return { roomId, available: false, participants: [] };
+    if (!this.rooms) return { roomId, available: false, relay: false, participants: [] };
+    const relay = this.relayMode();
     try {
       const list = await this.rooms.listParticipants(roomId);
       return {
         roomId,
         available: true,
+        relay,
         participants: list.map((p) => ({ name: p.name, kind: p.identity.startsWith('admin:') ? 'admin' : 'participant' })),
       };
     } catch (err) {
       console.error('[apeluri] nu pot citi starea apelului:', err instanceof Error ? err.message : err);
-      return { roomId, available: true, participants: [] };
+      return { roomId, available: true, relay, participants: [] };
     }
+  }
+
+  /** Releul se folosește când e configurat și porturile directe nu sunt deschise în router. */
+  private relayMode(): boolean {
+    const turn = this.ctx.config.calls.turn;
+    return Boolean(turn.domain || turn.udpPort) && !this.network().active;
   }
 
   /** Scoate din apeluri pe cei ale căror sesiuni au fost revocate, au expirat sau a căror cameră s-a închis. */

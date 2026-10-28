@@ -166,3 +166,17 @@ microfon/cameră oprite, revocare în timpul apelului, eliberarea resurselor la 
 **Neverificat:** apeluri din internet (media nu are încă drum public — partea 2), iPhone/Safari, calitatea
 pe date mobile, consumul de CPU/bandă al workstation-ului. Nu promitem un număr de participanți înainte de
 măsurători.
+
+## M5 — partea 2: drumul media din internet (28.10.2026)
+
+**Direct (recomandat), implementat și testat local:** NAT-PMP deschide automat UDP 7882 / TCP 7881 în routerul
+workstation-ului (IP public 193.34.109.2, fără CGNAT, NAT-PMP/UPnP disponibile), cu reînnoire și eliberare la
+oprire (teste cu router simulat). **Blocaj:** firewall-ul Windows de pe workstation (profil Public) blochează
+intrările; regula (`scripts/windows/allow-calls-firewall.cmd`) cere administrator, iar contul local „Computer”
+nu are parolă, deci Remote Desktop nu funcționează. Necesită prezența fizică a proprietarului (o dată): parolă
+pentru cont + rularea scriptului ca administrator.
+
+**Releu TURN prin Tailscale Funnel (fără administrator), implementat parțial:** configurația (`--relay-domain`,
+TLS făcut de Funnel pe 8443, `external_tls`) și modul „doar releu” în client există; testul local a trecut o
+dată, apoi a eșuat 3/3 (pachetele dintre releu și serverul media de pe același calculator se pierd). Cauza nu este
+identificată; testul e marcat `fixme`. Nu este activat în producție.
