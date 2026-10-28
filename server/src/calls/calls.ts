@@ -29,6 +29,13 @@ export class CallService {
   /** Bilete emise: identitate LiveKit → sesiunea NEXUS care a primit-o. */
   private readonly issued = new Map<string, Issued>();
   onState: (state: CallState) => void = () => undefined;
+  /** Starea drumului media din internet (setată de aplicație). */
+  network: () => { portMapping: string; active: boolean; externalIp: string | null; error: string | null } = () => ({
+    portMapping: 'none',
+    active: false,
+    externalIp: null,
+    error: null,
+  });
 
   constructor(ctx: Ctx, backend: { keys: LiveKitKeys; rooms: RoomServiceClient } | null) {
     this.ctx = ctx;

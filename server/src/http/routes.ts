@@ -260,6 +260,7 @@ export function buildRouter(ctx: Ctx, hub: Hub, calls: CallService): Router {
       files: count('files'),
       filesBytes: getRow<{ b: number | null }>(ctx.db, 'SELECT SUM(size) AS b FROM files')!.b ?? 0,
       wsConnections: hub.connectionCount,
+      calls: { available: calls.available, ...calls.network() },
     });
   });
 

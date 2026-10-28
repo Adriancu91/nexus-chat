@@ -43,6 +43,14 @@ if (config.calls.livekitBinary) {
       ? `Apeluri: server media LiveKit pornit (semnalizare 127.0.0.1:${config.calls.httpPort}, media UDP ${config.calls.rtcUdpPort} / TCP ${config.calls.rtcTcpPort}).`
       : 'Apeluri: LiveKit nu a pornit; vezi jurnalul logs\\livekit.log. Chatul funcționează normal.',
   );
+  const net = app.callsNetwork();
+  if (net.portMapping === 'natpmp') {
+    console.log(
+      net.active
+        ? `Apeluri din internet: porturile media sunt deschise în router (IP public ${net.externalIp}).`
+        : `Apeluri din internet: INDISPONIBILE (${net.error}).`,
+    );
+  }
 } else {
   console.log('Apeluri: dezactivate (livekit-server nu este instalat).');
 }

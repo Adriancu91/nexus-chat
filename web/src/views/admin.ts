@@ -455,7 +455,16 @@ async function statusTab(el: HTMLElement): Promise<void> {
     files: number;
     filesBytes: number;
     wsConnections: number;
+    calls?: { available: boolean; portMapping: string; active: boolean; externalIp: string | null; error: string | null };
   }>('GET', '/api/admin/status');
+  const c = s.calls;
+  const callsText = !c?.available
+    ? 'dezactivate (serverul media nu este instalat)'
+    : c.portMapping !== 'natpmp'
+      ? 'active doar în rețeaua locală'
+      : c.active
+        ? `active din internet (porturi deschise în router, IP ${c.externalIp})`
+        : `doar local — porturile NU sunt deschise: ${c.error ?? 'necunoscut'}`;
   const a = await adminRequest<ArchiveInfo>('GET', '/api/admin/archive');
   el.append(
     card(
@@ -466,6 +475,7 @@ async function statusTab(el: HTMLElement): Promise<void> {
         kv('Versiune', s.version),
         kv('Pornit de', formatUptime(s.uptimeSec)),
         kv('Conexiuni active', String(s.wsConnections)),
+        kv('Apeluri audio-video', callsText),
         kv('Camere', String(s.rooms)),
         kv('Mesaje arhivate', String(s.messages)),
         kv('Fișiere', `${s.files} (${formatBytes(s.filesBytes)})`),

@@ -94,6 +94,12 @@ export class LiveKitProcess {
     this.child.on('error', (err) => console.error('[apeluri] nu pot porni livekit-server:', err.message));
   }
 
+  /** Repornește procesul (ex. după schimbarea configurației); bucla de supraveghere îl pornește din nou. */
+  restart(): void {
+    if (this.child) this.child.kill();
+    else if (!this.stopped) this.start();
+  }
+
   /** Așteaptă până răspunde serverul media (sau expiră). */
   async waitReady(timeoutMs = 15_000): Promise<boolean> {
     const until = Date.now() + timeoutMs;

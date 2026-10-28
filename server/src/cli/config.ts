@@ -18,6 +18,8 @@ const { values } = parseArgs({
     'remove-origin': { type: 'string', multiple: true },
     'trust-proxy': { type: 'string' },
     'no-trust-proxy': { type: 'boolean' },
+    port: { type: 'string' },
+    'port-mapping': { type: 'string' },
   },
 });
 
@@ -48,6 +50,18 @@ if (values['no-trust-proxy']) {
   next.trustProxyHeader = null;
   changed = true;
 }
+if (values.port) {
+  const port = Number(values.port);
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Port invalid (1024–65535).');
+  next.port = port;
+  changed = true;
+}
+if (values['port-mapping']) {
+  const mode = values['port-mapping'];
+  if (mode !== 'natpmp' && mode !== 'none') throw new Error('--port-mapping acceptă natpmp sau none.');
+  next.calls = { ...next.calls, portMapping: mode };
+  changed = true;
+}
 
 if (changed) {
   writeConfigFile(file, next);
@@ -59,3 +73,7 @@ console.log(`Port: ${effective.port} (ascultă pe ${effective.host})`);
 console.log(`Origini permise: ${effective.allowedOrigins.join(', ')}`);
 console.log(`IP client din antet: ${effective.trustProxyHeader ?? 'nu (adresa conexiunii)'}`);
 console.log(`Limită fișier: ${Math.round(effective.limits.maxFileBytes / 1048576)} MB`);
+console.log(
+  `Apeluri: ${effective.calls.livekitBinary ? `LiveKit ${effective.calls.livekitBinary}` : 'dezactivate (livekit-server lipsește)'}; ` +
+    `porturi media UDP ${effective.calls.rtcUdpPort} / TCP ${effective.calls.rtcTcpPort}; deschidere automată în router: ${effective.calls.portMapping}`,
+);

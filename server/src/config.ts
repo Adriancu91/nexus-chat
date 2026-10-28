@@ -59,6 +59,11 @@ export interface CallsConfig {
   /** Adresa anunțată clienților pentru media. null = adresele locale (doar pentru teste/rețea locală). */
   nodeIp: string | null;
   maxParticipants: number;
+  /** Deschiderea automată a porturilor media în routerul de acasă (NAT-PMP). */
+  portMapping: 'none' | 'natpmp';
+  /** Adresa routerului; null = gateway-ul implicit al sistemului. */
+  gateway: string | null;
+  natPmpPort: number;
   /** Cât timp e valabil biletul de intrare în apel (conexiunea rămâne după aceea). */
   tokenTtlSec: number;
 }
@@ -203,6 +208,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Conf
       rtcUdpPort: typeof fc.rtcUdpPort === 'number' ? fc.rtcUdpPort : 7882,
       nodeIp: typeof fc.nodeIp === 'string' && fc.nodeIp ? fc.nodeIp : null,
       maxParticipants: typeof fc.maxParticipants === 'number' ? fc.maxParticipants : 8,
+      portMapping: fc.portMapping === 'natpmp' ? 'natpmp' : 'none',
+      gateway: typeof fc.gateway === 'string' && fc.gateway ? fc.gateway : null,
+      natPmpPort: typeof fc.natPmpPort === 'number' ? fc.natPmpPort : 5351,
       tokenTtlSec: 10 * 60,
     },
   };
