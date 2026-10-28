@@ -13,6 +13,11 @@ export interface PresenceEntry {
   displayName: string;
 }
 
+export interface CallState {
+  available: boolean;
+  participants: { name: string; kind: 'admin' | 'participant' }[];
+}
+
 export interface PendingMessage {
   clientMsgId: string;
   body: string;
@@ -27,6 +32,8 @@ export interface RoomEvents {
   confirmed(clientMsgId: string, message: Message): void;
   presence(online: PresenceEntry[]): void;
   error(message: string, code: string): void;
+  /** Cine este acum în apelul camerei (și dacă serverul are apelurile configurate). */
+  call(state: CallState): void;
 }
 
 type Outgoing = Record<string, unknown>;
@@ -196,6 +203,11 @@ export class RoomConnection {
         if (id && this.outbox.delete(id)) this.events.confirmed(id, m);
         return;
       }
+      case 'call':
+        return this.events.call({
+          available: Boolean(msg.available),
+          participants: (msg.participants as CallState['participants']) ?? [],
+        });
       case 'presence':
         return this.events.presence((msg.online as PresenceEntry[]) ?? []);
       case 'error': {

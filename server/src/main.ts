@@ -36,6 +36,16 @@ if (swept.tmpRemoved + swept.orphansRemoved > 0) {
   console.log(`Curățenie la pornire: ${swept.tmpRemoved} transferuri neterminate, ${swept.orphansRemoved} fișiere fără înregistrare.`);
 }
 const addr = await app.listen();
+if (config.calls.livekitBinary) {
+  const ready = await app.startCalls();
+  console.log(
+    ready
+      ? `Apeluri: server media LiveKit pornit (semnalizare 127.0.0.1:${config.calls.httpPort}, media UDP ${config.calls.rtcUdpPort} / TCP ${config.calls.rtcTcpPort}).`
+      : 'Apeluri: LiveKit nu a pornit; vezi jurnalul logs\\livekit.log. Chatul funcționează normal.',
+  );
+} else {
+  console.log('Apeluri: dezactivate (livekit-server nu este instalat).');
+}
 const maintenance = new Maintenance(app.ctx);
 maintenance.start();
 

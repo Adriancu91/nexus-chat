@@ -45,9 +45,25 @@ export interface Config {
   bootstrapCodeTtlMs: number;
   enrollmentCodeTtlMs: number;
   limits: Limits;
+  calls: CallsConfig;
 }
 
-export type ConfigOverrides = Partial<Omit<Config, 'limits'>> & { limits?: Partial<Limits> };
+/** Apeluri audio-video prin LiveKit (server media separat, rulat de NEXUS pe același calculator). */
+export interface CallsConfig {
+  /** Calea către livekit-server(.exe). null = apelurile sunt dezactivate. */
+  livekitBinary: string | null;
+  /** Portul local de semnalizare LiveKit (doar 127.0.0.1; din internet se ajunge prin NEXUS, /rtc). */
+  httpPort: number;
+  rtcTcpPort: number;
+  rtcUdpPort: number;
+  /** Adresa anunțată clienților pentru media. null = adresele locale (doar pentru teste/rețea locală). */
+  nodeIp: string | null;
+  maxParticipants: number;
+  /** Cât timp e valabil biletul de intrare în apel (conexiunea rămâne după aceea). */
+  tokenTtlSec: number;
+}
+
+export type ConfigOverrides = Partial<Omit<Config, 'limits' | 'calls'>> & { limits?: Partial<Limits>; calls?: Partial<CallsConfig> };
 
 export const DEFAULT_PORT = 8787;
 const DEV_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
@@ -92,6 +108,13 @@ export interface FileConfig {
   allowedOrigins?: string[];
   trustProxyHeader?: string | null;
   maxFileMb?: number;
+  calls?: Partial<CallsConfig>;
+}
+
+/** livekit-server lângă folderul arhivei (ex. %LOCALAPPDATA%\NexusChat\livekit\livekit-server.exe), dacă există. */
+export function defaultLiveKitBinary(dataDir: string): string | null {
+  const exe = path.join(path.dirname(dataDir), 'livekit', process.platform === 'win32' ? 'livekit-server.exe' : 'livekit-server');
+  return fs.existsSync(exe) ? exe : null;
 }
 
 export function configFilePath(env: NodeJS.ProcessEnv = process.env): string {
@@ -129,6 +152,8 @@ export function writeConfigFile(file: string, config: FileConfig): void {
 /** Prioritate: valori explicite (teste) > variabile de mediu > fișierul de configurare > implicit. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: ConfigOverrides = {}, file: FileConfig = {}): Config {
   const fileOrigins = Array.isArray(file.allowedOrigins) ? file.allowedOrigins.map(String) : undefined;
+  const dataDirResolved = env.NEXUS_DATA_DIR ? path.resolve(env.NEXUS_DATA_DIR) : defaultDataDir();
+  const fc = file.calls ?? {};
   const base: Config = {
     host: env.NEXUS_HOST ?? (typeof file.host === 'string' ? file.host : '127.0.0.1'),
     port: intEnv(env.NEXUS_PORT, typeof file.port === 'number' ? file.port : DEFAULT_PORT),
@@ -167,8 +192,26 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Conf
       uploadsPerWindow: 30,
       uploadWindowMs: 10 * MIN,
     },
+    calls: {
+      livekitBinary: env.NEXUS_LIVEKIT_BIN
+        ? path.resolve(env.NEXUS_LIVEKIT_BIN)
+        : typeof fc.livekitBinary === 'string'
+          ? fc.livekitBinary
+          : defaultLiveKitBinary(dataDirResolved),
+      httpPort: typeof fc.httpPort === 'number' ? fc.httpPort : 7880,
+      rtcTcpPort: typeof fc.rtcTcpPort === 'number' ? fc.rtcTcpPort : 7881,
+      rtcUdpPort: typeof fc.rtcUdpPort === 'number' ? fc.rtcUdpPort : 7882,
+      nodeIp: typeof fc.nodeIp === 'string' && fc.nodeIp ? fc.nodeIp : null,
+      maxParticipants: typeof fc.maxParticipants === 'number' ? fc.maxParticipants : 8,
+      tokenTtlSec: 10 * 60,
+    },
   };
-  const config: Config = { ...base, ...overrides, limits: { ...base.limits, ...overrides.limits } };
+  const config: Config = {
+    ...base,
+    ...overrides,
+    limits: { ...base.limits, ...overrides.limits },
+    calls: { ...base.calls, ...overrides.calls },
+  };
   config.allowedOrigins = [...new Set(config.allowedOrigins.map(normalizeOrigin))];
   return config;
 }

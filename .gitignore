@@ -24,3 +24,5 @@ Thumbs.db
 web/.e2e-data/
 web/test-results/
 web/playwright-report/
+# unelte descărcate (LiveKit server etc.)
+.tools/

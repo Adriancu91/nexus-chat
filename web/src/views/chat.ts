@@ -3,7 +3,8 @@ import { errorMessage, request, type Message } from '../api.ts';
 import { clear, h, icon } from '../dom.ts';
 import { PreviewCache, saveFile, uploadFile, type UploadHandle } from '../files.ts';
 import { navigate } from '../nav.ts';
-import { RoomConnection, type ConnectionState, type PendingMessage, type PresenceEntry } from '../realtime.ts';
+import { RoomConnection, type CallState, type ConnectionState, type PendingMessage, type PresenceEntry } from '../realtime.ts';
+import { openCall } from './call.ts';
 import { forgetRoomSession, getRoomSession, leaveRoom } from '../sessions.ts';
 import { dayLabel, dialog, formatBytes, formatDateTime, formatTime, iconButton, initials, senderHue, toast } from '../ui.ts';
 import { appBar, card, page } from './layout.ts';
@@ -73,7 +74,55 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
   panelTitle.id = 'side-title';
   const main = h('main', { class: 'chat-main' }, scroller, closedNote, composer);
 
+  // ---- apel ----
+  let callState: CallState = { available: false, participants: [] };
+  let inCall = false;
+  const callBtn = iconButton('phone', 'Apel audio-video', () => void startCall());
+  callBtn.hidden = true;
+  const callBanner = h('div', { class: 'call-banner', hidden: true, role: 'status', 'data-testid': 'call-banner' });
+
+  function renderCallBanner() {
+    callBtn.hidden = !callState.available || roomClosed;
+    clear(callBanner);
+    const n = callState.participants.length;
+    callBanner.hidden = !callState.available || n === 0 || inCall || roomClosed;
+    if (callBanner.hidden) return;
+    const names = callState.participants.map((p) => p.name).slice(0, 3).join(', ');
+    callBanner.append(
+      icon('phone'),
+      h('span', null, `Apel în curs: ${names}${n > 3 ? ` și încă ${n - 3}` : ''}`),
+      h('button', { type: 'button', class: 'btn btn-small btn-primary', onclick: () => void startCall() }, 'Intră'),
+    );
+  }
+
+  async function startCall() {
+    if (inCall || roomClosed) return;
+    const data = await dialog({
+      title: 'Intră în apel',
+      body: [
+        h('label', { class: 'check' }, h('input', { type: 'radio', name: 'mode', value: 'video', checked: true }), 'Cu sunet și imagine'),
+        h('label', { class: 'check' }, h('input', { type: 'radio', name: 'mode', value: 'audio' }), 'Doar sunet'),
+        h('p', { class: 'muted small' }, 'Apelul trece prin serverul familiei și nu este înregistrat. Browserul îți va cere acces la microfon și cameră.'),
+      ],
+      confirmLabel: 'Intră în apel',
+    });
+    if (!data) return;
+    inCall = true;
+    renderCallBanner();
+    await openCall({
+      roomId: opts.roomId,
+      roomName: title.textContent ?? '',
+      token,
+      withVideo: data.get('mode') === 'video',
+      onClosed: () => {
+        inCall = false;
+        renderCallBanner();
+      },
+    });
+  }
+
   const actions = [
+    callBtn,
     iconButton('search', 'Caută în conversație', () => openPanel(panelMode === 'search' ? null : 'search')),
     iconButton('folder', 'Fișiere', () => openPanel(panelMode === 'files' ? null : 'files')),
     iconButton('people', 'Participanți', () => openPanel(panelMode === 'people' ? null : 'people')),
@@ -86,6 +135,7 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
       { class: 'chat' },
       appBar({ title: h('span', { class: 'title-with-avatar' }, roomAvatar, title), subtitle, back: opts.asAdmin ? '/admin' : '/', actions }),
       banner,
+      callBanner,
       h('div', { class: 'chat-body' }, main, panel),
     ),
   );
@@ -505,6 +555,10 @@ export function renderChat(root: HTMLElement, opts: { roomId: string; asAdmin: b
         online = list;
         renderPeople();
         updateOnlineSubtitle();
+      },
+      call(state) {
+        callState = state;
+        renderCallBanner();
       },
       error(message, code) {
         if (code !== 'session_revoked') toast(message, 'error');

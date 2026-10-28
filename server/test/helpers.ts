@@ -24,7 +24,18 @@ export interface TestServer {
 
 export async function startServer(opts: { dataDir?: string; overrides?: ConfigOverrides } = {}): Promise<TestServer> {
   const dataDir = opts.dataDir ?? tempDir();
-  const config = loadConfig({}, { dataDir, port: 0, host: '127.0.0.1', allowedOrigins: [TEST_ORIGIN], ...opts.overrides });
+  const config = loadConfig(
+    {},
+    {
+      dataDir,
+      port: 0,
+      host: '127.0.0.1',
+      allowedOrigins: [TEST_ORIGIN],
+      ...opts.overrides,
+      // Apelurile (LiveKit) doar când un test le cere explicit.
+      calls: { livekitBinary: null, ...opts.overrides?.calls },
+    },
+  );
   const app = createApp(config);
   const addr = await app.listen();
   const bootstrap = ensureBootstrapCode(app.ctx);

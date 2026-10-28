@@ -7,7 +7,7 @@
 | M2 | Web Client responsive (română), intrare în cameră, chat, panou admin, reconectare, teste E2E | **Finalizat** (13/13 E2E) |
 | M3 | Fișiere (upload/download, SHA-256, limite, spațiu pe disc), backup + restaurare testată, retenție, căutare (FTS5) | **Finalizat** (61/61 server, 20/20 E2E) |
 | M4 | GitHub Pages + Tailscale Funnel, teste de pe rețele diferite | **Finalizat** — server pe workstation, testat de pe telefon pe date mobile |
-| M5 | Apeluri: semnalizare, mediasoup pe laptop, 1:1 apoi grup, verificarea topologiei | Planificat — risc ridicat (vezi CONECTIVITATE.md) |
+| M5 | Apeluri: semnalizare, server media pe gazdă, 1:1 și grup, verificarea topologiei | **În curs** — partea 1 (local) gata; partea 2: drumul media din internet |
 | M6 | Aplicația Windows (Tauri): instalare, pornire/oprire, iconiță, backup, actualizare | Planificat |
 | M7 | Audit de securitate, regresie, restaurare, documentație de operare, checklist lansare | Planificat |
 
@@ -151,3 +151,18 @@ reînregistrare, mesajele merg. Verificări din exterior 12/12, ~0,8 s per cerer
 
 **Rămas deschis (nu blochează):** Safari/iOS netestat; antetul X-Forwarded-For prin Funnel neverificat
 (Administrare → Stare și arhivă → Diagnostic conexiune); ștergerea copiilor arhivei folosite la transfer.
+
+## M5 — partea 1 (28.10.2026)
+
+**Implementat:** apeluri de grup audio-video prin LiveKit 1.13.9 (pornit de NEXUS), bilete JWT per cameră,
+revocare instantanee, banner „Apel în curs” în chat, ecran de apel (microfon, cameră, schimbare cameră,
+ieșire, cine vorbește, reconectare automată, mesaje clare pentru permisiuni refuzate), limite: 8
+participanți/apel (configurabil), video 360p/600 kbps cu simulcast.
+
+**Testat:** server 79/79 (inclusiv LiveKit real: bilete, proxy /rtc, webhook-uri semnate); E2E 28/28, dintre
+care 6 de apel cu cameră/microfon simulate: doi participanți se văd și se aud, topologia (doar prin server),
+microfon/cameră oprite, revocare în timpul apelului, eliberarea resurselor la ieșire.
+
+**Neverificat:** apeluri din internet (media nu are încă drum public — partea 2), iPhone/Safari, calitatea
+pe date mobile, consumul de CPU/bandă al workstation-ului. Nu promitem un număr de participanți înainte de
+măsurători.
