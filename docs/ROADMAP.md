@@ -6,7 +6,7 @@
 | M1 | Backend: admin criptografic, camere, sesiuni, SQLite + migrații, mesaje în timp real, teste | **Finalizat** (41/41 teste) |
 | M2 | Web Client responsive (română), intrare în cameră, chat, panou admin, reconectare, teste E2E | **Finalizat** (13/13 E2E) |
 | M3 | Fișiere (upload/download, SHA-256, limite, spațiu pe disc), backup + restaurare testată, retenție, căutare (FTS5) | **Finalizat** (61/61 server, 20/20 E2E) |
-| M4 | GitHub Pages + Tailscale Funnel, teste de pe rețele diferite | Următorul — necesită aprobarea ta pentru publicare |
+| M4 | GitHub Pages + Tailscale Funnel, teste de pe rețele diferite | **În curs** — partea locală gata; așteaptă aprobările tale (vezi [ACCES-EXTERN.md](ACCES-EXTERN.md)) |
 | M5 | Apeluri: semnalizare, mediasoup pe laptop, 1:1 apoi grup, verificarea topologiei | Planificat — risc ridicat (vezi CONECTIVITATE.md) |
 | M6 | Aplicația Windows (Tauri): instalare, pornire/oprire, iconiță, backup, actualizare | Planificat |
 | M7 | Audit de securitate, regresie, restaurare, documentație de operare, checklist lansare | Planificat |
@@ -121,3 +121,24 @@ istoric, backup/restaurare (M3; ecranul de stare spune explicit asta), apeluri (
 - Backup-ul implicit e pe același disc cu arhiva; interfața avertizează și cere un disc extern.
 - Un fișier de 100 MB este ținut în memorie de browser la descărcare (acceptabil pe telefoane
   moderne; pentru fișiere mai mari ar fi nevoie de descărcare directă prin link temporar).
+
+## M4 — stare intermediară
+
+**Gata (local, testat):** fișier de configurare pe laptop (`npm run config`), IP-ul real al clientului
+în spatele proxy-ului (doar ultima adresă din `X-Forwarded-For`, doar de la proxy-ul local), diagnostic
+pentru administrator, adresa serverului publicată în `config.json` lângă pagină, script de publicare pe
+`gh-pages` cu verificarea conținutului (`npm run deploy:pages`), verificator extern
+(`npm run check:external`), ghid pas cu pas. Teste: 69/69 server, 20/20 E2E.
+
+**Publicat (cu aprobarea ta):** Funnel pornit pe portul 8787; pagina pe <https://adriancu91.github.io/nexus-chat/>.
+Verificări din exterior trecute (HTTPS, CORS, autorizare, WSS), inclusiv prin releul public Funnel.
+
+**Testat de proprietar (28.10.2026), telefon pe date mobile:** înregistrare administrator, creare cameră,
+intrare de pe telefon, mesaje în ambele sensuri, trimiterea unei poze — funcționează; „se mișcă puțin
+cam greu”.
+
+**Măsurat:** prin releul Funnel o conexiune nouă durează 1,9–7,7 s (TLS prin Frankfurt), față de 7 ms local.
+Mesajele merg pe WebSocket-ul deja deschis; încetineala se simte la încărcarea paginii, la upload-uri și la
+previzualizări (care descarcă imaginea întreagă).
+
+**Neverificat încă:** Safari/iOS, antetul IP prin Funnel (Diagnostic conexiune).

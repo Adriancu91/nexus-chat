@@ -92,13 +92,20 @@ export function isOriginAllowed(config: Config, origin: string | undefined): boo
  * altfel oricine le-ar putea falsifica pentru a ocoli limitarea încercărilor.
  */
 export function clientIp(config: Config, req: IncomingMessage): string {
-  if (config.trustProxyHeader) {
+  const socketIp = req.socket.remoteAddress ?? 'unknown';
+  // Proxy-ul de încredere (Tailscale) rulează pe același laptop; de la alte adrese antetul e ignorat.
+  if (config.trustProxyHeader && isLoopback(socketIp)) {
     const raw = req.headers[config.trustProxyHeader];
-    const value = Array.isArray(raw) ? raw[0] : raw;
-    const first = value?.split(',')[0]?.trim();
-    if (first) return first;
+    const value = Array.isArray(raw) ? raw.join(',') : raw;
+    // Ultima adresă este cea adăugată de proxy; cele dinaintea ei pot fi trimise de oricine.
+    const last = value?.split(',').map((s) => s.trim()).filter(Boolean).at(-1);
+    if (last) return last;
   }
-  return req.socket.remoteAddress ?? 'unknown';
+  return socketIp;
+}
+
+export function isLoopback(ip: string): boolean {
+  return ip === '::1' || ip.startsWith('127.') || ip.startsWith('::ffff:127.');
 }
 
 export function bearerToken(req: IncomingMessage): string | null {

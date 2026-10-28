@@ -480,6 +480,30 @@ async function statusTab(el: HTMLElement): Promise<void> {
     retentionCard(a),
     integrityCard(),
     restoreCard(a),
+    await connectionCard(),
+  );
+}
+
+/** Ce vede serverul despre conexiunea acestui dispozitiv (util pentru configurarea Tailscale Funnel). */
+async function connectionCard(): Promise<HTMLElement> {
+  const d = await adminRequest<{ socketAddress: string | null; clientIp: string; trustProxyHeader: string | null; headers: Record<string, string> }>(
+    'GET',
+    '/api/admin/diagnostics/request',
+  );
+  const forwarded = d.headers['x-forwarded-for'];
+  return card(
+    h('h2', null, 'Diagnostic conexiune'),
+    h(
+      'dl',
+      { class: 'kv-list', 'data-testid': 'diagnostics' },
+      kv('IP folosit pentru limitări', d.clientIp),
+      kv('Conexiune de la', d.socketAddress ?? '?'),
+      kv('X-Forwarded-For', forwarded ?? 'lipsește'),
+      kv('IP din antet', d.trustProxyHeader ? `da (${d.trustProxyHeader})` : 'nu'),
+    ),
+    forwarded && !d.trustProxyHeader
+      ? h('p', { class: 'note-warn' }, 'Proxy-ul trimite IP-ul real. Pe laptop rulează: npm.cmd run config -- --trust-proxy x-forwarded-for, apoi repornește serverul.')
+      : null,
   );
 }
 

@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -81,15 +82,65 @@ function mbEnv(value: string | undefined, fallbackMb: number): number {
   return Math.round(n * 1024 * 1024);
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: ConfigOverrides = {}): Config {
+/**
+ * Fișierul de configurare de pe laptop (fără secrete), editat de `npm run config`.
+ * Implicit: %LOCALAPPDATA%\NexusChat\config.json, lângă folderul arhivei.
+ */
+export interface FileConfig {
+  port?: number;
+  host?: string;
+  allowedOrigins?: string[];
+  trustProxyHeader?: string | null;
+  maxFileMb?: number;
+}
+
+export function configFilePath(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.NEXUS_CONFIG) return path.resolve(env.NEXUS_CONFIG);
+  const dataDir = env.NEXUS_DATA_DIR ? path.resolve(env.NEXUS_DATA_DIR) : defaultDataDir();
+  return path.join(path.dirname(dataDir), 'config.json');
+}
+
+export function readConfigFile(file: string): FileConfig {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    // Doar lipsa fișierului înseamnă „valori implicite”; orice altă eroare trebuie văzută.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return {};
+    throw new Error(`Nu pot citi fișierul de configurare ${file} (${code ?? String(err)}).`);
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw.replace(/^﻿/, ''));
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error();
+    return parsed as FileConfig;
+  } catch {
+    throw new Error(`Fișierul de configurare ${file} nu este JSON valid.`);
+  }
+}
+
+export function writeConfigFile(file: string, config: FileConfig): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + '\n');
+  fs.renameSync(tmp, file);
+}
+
+/** Prioritate: valori explicite (teste) > variabile de mediu > fișierul de configurare > implicit. */
+export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: ConfigOverrides = {}, file: FileConfig = {}): Config {
+  const fileOrigins = Array.isArray(file.allowedOrigins) ? file.allowedOrigins.map(String) : undefined;
   const base: Config = {
-    host: env.NEXUS_HOST ?? '127.0.0.1',
-    port: intEnv(env.NEXUS_PORT, DEFAULT_PORT),
+    host: env.NEXUS_HOST ?? (typeof file.host === 'string' ? file.host : '127.0.0.1'),
+    port: intEnv(env.NEXUS_PORT, typeof file.port === 'number' ? file.port : DEFAULT_PORT),
     dataDir: env.NEXUS_DATA_DIR ? path.resolve(env.NEXUS_DATA_DIR) : defaultDataDir(),
     allowedOrigins: env.NEXUS_ALLOWED_ORIGINS
       ? env.NEXUS_ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
-      : DEV_ORIGINS,
-    trustProxyHeader: env.NEXUS_TRUST_PROXY_HEADER ? env.NEXUS_TRUST_PROXY_HEADER.toLowerCase() : null,
+      : [...DEV_ORIGINS, ...(fileOrigins ?? [])],
+    trustProxyHeader: env.NEXUS_TRUST_PROXY_HEADER
+      ? env.NEXUS_TRUST_PROXY_HEADER.toLowerCase()
+      : typeof file.trustProxyHeader === 'string' && file.trustProxyHeader
+        ? file.trustProxyHeader.toLowerCase()
+        : null,
     adminSessionTtlMs: 12 * HOUR,
     participantSessionTtlMs: 30 * DAY,
     bootstrapCodeTtlMs: 30 * MIN,
@@ -111,13 +162,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Conf
       adminWindowMs: 15 * MIN,
       messagesPerWindow: 20,
       messageWindowMs: 10_000,
-      maxFileBytes: mbEnv(env.NEXUS_MAX_FILE_MB, 100),
+      maxFileBytes: mbEnv(env.NEXUS_MAX_FILE_MB ?? (typeof file.maxFileMb === 'number' ? String(file.maxFileMb) : undefined), 100),
       minFreeDiskBytes: 1024 * 1024 * 1024,
       uploadsPerWindow: 30,
       uploadWindowMs: 10 * MIN,
     },
   };
   const config: Config = { ...base, ...overrides, limits: { ...base.limits, ...overrides.limits } };
-  config.allowedOrigins = config.allowedOrigins.map(normalizeOrigin);
+  config.allowedOrigins = [...new Set(config.allowedOrigins.map(normalizeOrigin))];
   return config;
 }

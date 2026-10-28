@@ -1,4 +1,5 @@
 import './styles.css';
+import { loadPublishedConfig } from './config.ts';
 import { clear } from './dom.ts';
 import { navigate } from './nav.ts';
 import { renderAdmin } from './views/admin.ts';
@@ -48,5 +49,6 @@ function decodeURIComponentSafe(s: string): string {
   }
 }
 
+await loadPublishedConfig();
 window.addEventListener('hashchange', route);
 route();

@@ -10,6 +10,7 @@ proprietarului (Windows 11); interfața web va fi publicată pe GitHub Pages.
 ## Documentație
 - [Arhitectură și decizii](docs/ARHITECTURA.md)
 - [Securitate și model de încredere](docs/SECURITATE.md)
+- [Acces din internet — ghid pas cu pas](docs/ACCES-EXTERN.md)
 - [Conectare din exterior și apeluri](docs/CONECTIVITATE.md)
 - [API](docs/API.md)
 - [Plan și stare](docs/ROADMAP.md)

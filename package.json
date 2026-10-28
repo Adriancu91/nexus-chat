@@ -19,6 +19,9 @@
     "test:e2e": "npm run test:e2e -w web",
     "admin:code": "npm run admin:code -w server",
     "backup": "npm run backup -w server --",
-    "restore": "npm run restore -w server --"
+    "restore": "npm run restore -w server --",
+    "config": "npm run config -w server --",
+    "check:external": "npm run check:external -w server --",
+    "deploy:pages": "node scripts/deploy-pages.mjs"
   }
 }

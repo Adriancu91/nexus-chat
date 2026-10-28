@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { createApp } from './app.ts';
-import { loadConfig } from './config.ts';
+import { configFilePath, loadConfig, readConfigFile } from './config.ts';
 import { ensureBootstrapCode } from './services/admin.ts';
 import { sweepStorage } from './services/files.ts';
 import { acquireServerLock } from './services/lock.ts';
@@ -20,7 +20,8 @@ if (values['data-dir']) env.NEXUS_DATA_DIR = values['data-dir'];
 if (values.port) env.NEXUS_PORT = values.port;
 if (values.host) env.NEXUS_HOST = values.host;
 
-const config = loadConfig(env);
+const configFile = configFilePath(env);
+const config = loadConfig(env, {}, readConfigFile(configFile));
 fs.mkdirSync(config.dataDir, { recursive: true });
 let releaseLock: () => void;
 try {
@@ -41,6 +42,7 @@ maintenance.start();
 console.log(`NEXUS CHAT server pornit pe http://${addr.address}:${addr.port}`);
 console.log(`Arhiva locală: ${config.dataDir}`);
 console.log(`Origini permise: ${config.allowedOrigins.join(', ')}`);
+console.log(`Configurare: ${configFile}${config.trustProxyHeader ? ` (IP client din antetul ${config.trustProxyHeader})` : ''}`);
 
 const bootstrap = ensureBootstrapCode(app.ctx);
 if (bootstrap) {

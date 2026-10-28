@@ -98,6 +98,11 @@ mesaj WebSocket — niciodată în URL (URL-urile ajung în jurnale de proxy).
 | Backup | Fără date private în GitHub. **Necriptat**: protejează folderul de backup cu BitLocker To Go pe un disc extern. Restaurarea refuză un backup cu amprente greșite și nu șterge arhiva existentă. |
 | O singură instanță | Fișierul `server.lock` împiedică două servere să scrie în aceeași arhivă. |
 
+## Riscuri acceptate explicit
+- **Origine comună GitHub Pages** (28.10.2026): NEXUS este publicat pe `adriancu91.github.io`, aceeași origine cu alte
+  6 site-uri ale contului. Codul acelor site-uri ar putea citi sesiunile participanților și folosi cheia de
+  administrator a browserului. Alternativa recomandată (organizație GitHub separată) rămâne disponibilă.
+
 ## Încă neimplementat (planificat)
 - Criptarea backup-urilor în aplicație (opțională; vezi raportul M3).
 - HTTPS/WSS extern (M4) — local serverul vorbește HTTP pe 127.0.0.1; TLS este oferit de tunel.
