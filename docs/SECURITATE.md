@@ -1,0 +1,88 @@
+# Securitate și model de încredere
+
+## Model de încredere
+
+| Cine | Ce poate vedea | Observații |
+|---|---|---|
+| Administratorul (proprietarul laptopului) | Tot: mesaje, fișiere, metadate, jurnal | Arhiva este pe laptopul lui, necriptată la nivel de aplicație. Protecția discului = BitLocker (recomandat). |
+| Participant | Doar camera în care a intrat cu parolă | Nu poate citi, scrie sau enumera alte camere. |
+| Furnizorul de conectivitate | Depinde de soluție — vezi [CONECTIVITATE.md](CONECTIVITATE.md) | Cu Tailscale Funnel TLS se termină pe laptop. |
+| GitHub | Codul sursă și interfața statică | Nicio dată privată. |
+
+**NEXUS CHAT nu are criptare end-to-end.** HTTPS/WSS protejează datele în tranzit între browser și
+laptop; pe laptop, serverul vede conținutul (trebuie să-l arhiveze). Nu vom afirma altceva.
+Parola camerei controlează **accesul**; nu criptează nimic.
+
+## Administratorul
+
+### Inițializare (prima pornire)
+1. Serverul vede că nu există niciun dispozitiv de administrator și afișează în consola locală un
+   **cod de inițializare** de 100 de biți, de unică folosință, valabil 30 de minute.
+2. Pe laptop, pagina de administrare generează o pereche de chei ECDSA P-256 (WebCrypto,
+   ne-exportabilă) și trimite **doar cheia publică** + codul.
+3. Codul este consumat atomic; dispozitivul este înregistrat.
+
+Nu există parole sau tokenuri implicite. Codul nu ajunge niciodată în Git (este generat la rulare,
+în baza de date se păstrează doar hash-ul său).
+
+### Autentificare
+`POST /api/admin/challenge` → nonce aleator (256 biți), valabil 60 s → dispozitivul semnează
+`nexus-chat/admin-login/v1\n<challengeId>\n<nonce>` → `POST /api/admin/login`. Provocarea se consumă
+la prima încercare (fără reluare). Rezultatul: sesiune de administrator de 12 ore.
+
+### Adăugarea telefonului
+De pe un dispozitiv deja autentificat: „Adaugă dispozitiv” → cod de înrolare valabil 10 minute →
+pe telefon se introduce codul; telefonul își generează propria cheie. Fiecare dispozitiv are cheia
+lui și poate fi revocat individual.
+
+### Revocare și recuperare
+- Revocarea unui dispozitiv anulează imediat toate sesiunile lui și închide conexiunile active.
+- Dacă toate dispozitivele sunt pierdute: `npm run admin:code` **pe laptop** emite un cod nou
+  direct în arhiva locală. Necesită acces la fișierele laptopului, deci nu poate fi folosit de la
+  distanță. Aceasta este „rădăcina de încredere”: cine controlează laptopul controlează serverul.
+
+### De ce nu adresa IP / „cererea vine de pe localhost”
+Tunelul se conectează la server de pe 127.0.0.1, deci orice cerere din internet *pare* locală.
+Verificarea pe IP ar fi o falsă securitate; nu este folosită nicăieri.
+
+## Participanți și camere
+- Parolele camerelor: scrypt (N=2¹⁵, r=8, p=1, sare de 16 octeți), minim 8 caractere.
+- Cod de cameră inexistent și parolă greșită → **același** răspuns și același cost de calcul
+  (nu se pot enumera camerele).
+- Limitare: 10 eșecuri / 15 min per IP și 30 eșecuri / 15 min per cameră. Când limita este
+  atinsă, chiar și parola corectă este refuzată până la expirarea ferestrei.
+  *Compromis documentat:* un atacator poate bloca temporar intrările noi într-o cameră (participanții
+  deja conectați nu sunt afectați). Recomandare: parole de cameră lungi (fraze).
+- Sesiune participant: 30 de zile, legată de o singură cameră; revocabilă individual, la schimbarea
+  parolei (opțional) și automat la închiderea sau ștergerea camerei.
+
+## Tokenuri
+256 de biți aleatori; în baza de date doar SHA-256. Trimise în antetul `Authorization` sau în primul
+mesaj WebSocket — niciodată în URL (URL-urile ajung în jurnale de proxy).
+
+## Măsuri implementate în M1 (cu teste)
+
+| Măsură | Unde | Test |
+|---|---|---|
+| Autorizare pe fiecare operațiune | `services/access.ts` | `rooms.test.ts`, `realtime.test.ts` |
+| Izolare între camere (HTTP și WebSocket) | `requireRoomAccess` | „un participant nu poate citi…”, „izolare…” |
+| Sesiune re-verificată la fiecare mesaj WebSocket | `ws/hub.ts` `revalidate` | „participantul revocat este deconectat imediat” |
+| CORS cu listă explicită; `Origin` verificat la WebSocket | `http/http.ts`, `ws/hub.ts` | „CORS…”, „origine neaprobată…” |
+| Limite: corp HTTP 16 KiB, mesaj 4000 caractere, cadru WS 64 KiB, 200 conexiuni, 20 mesaje/10 s | `config.ts` | „cereri invalide…”, „limitarea ritmului…” |
+| Validare intrări, eliminare caractere de control și bidi din nume | `validation.ts` | `unit.test.ts` |
+| Antete de securitate (`nosniff`, CSP `default-src 'none'`, `no-store`) | `http/http.ts` | — |
+| Jurnal administrativ fără secrete | `services/audit.ts` | „…jurnalul nu conține tokenuri” |
+| Interogări SQL parametrizate (fără concatenare de date) | `services/*` | — |
+
+## Încă neimplementat (planificat)
+- XSS: textul mesajelor este stocat ca atare; clientul (M2) trebuie să-l afișeze **doar ca text**
+  (`textContent`), plus CSP strict pe pagina GitHub Pages.
+- Upload-uri periculoase, path traversal (M3): fișierele vor avea nume interne UUID, niciodată
+  căi primite de la utilizator; descărcare cu `Content-Disposition: attachment` și `nosniff`.
+- Backup criptat și verificat (M3).
+- HTTPS/WSS extern (M4) — local serverul vorbește HTTP pe 127.0.0.1; TLS este oferit de tunel.
+- Audit de securitate complet (M7).
+
+## Raportarea problemelor
+Proiect privat de familie. Problemele de securitate se raportează direct proprietarului, nu în
+issue-uri publice.
