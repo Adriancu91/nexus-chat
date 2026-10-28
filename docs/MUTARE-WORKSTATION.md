@@ -25,7 +25,7 @@ Sesiunile din telefoane și dispozitivele de administrator trec singure pe noua 
 | 3 | laptop | eu | arhivează folderul `%LOCALAPPDATA%\NexusChat\backups` într-un `.zip` |
 | 4 | laptop → workstation | eu | `tailscale file cp <zip> desktop-br58s2c:` (criptat, direct prin Tailscale, fără cloud) |
 | 5 | workstation | sesiunea Kronos | `tailscale file get C:\NexusChat\import`, dezarhivare, `npm.cmd run restore -- <nume> --backup-dir C:\NexusChat\import\backups` (verifică SHA-256 înainte) |
-| 6 | workstation | sesiunea Kronos | `npm.cmd run config -- --allow-origin https://adriancu91.github.io`, `scripts\windows\install-autostart.cmd`, pornirea serverului, `tailscale funnel --bg 8787` |
+| 6 | workstation | sesiunea Kronos | `npm.cmd run config -- --allow-origin https://adriancu91.github.io`, `scripts\windows\install-autostart.cmd`, pornirea serverului, `tailscale funnel --bg 8788` (vezi „Rezultat”: portul 8787 e ocupat pe workstation) |
 | 7 | laptop | eu | `tailscale funnel --https=443 off` |
 | 8 | laptop | eu | `npm run deploy:pages -- --backend https://desktop-br58s2c.tailb799d9.ts.net --previous https://kronos.tailb799d9.ts.net` |
 | 9 | laptop | eu | `npm run check:external -- --backend https://desktop-br58s2c.tailb799d9.ts.net --origin https://adriancu91.github.io` |
@@ -41,3 +41,17 @@ Sesiunile din telefoane și dispozitivele de administrator trec singure pe noua 
 - Serverul de pe laptop **nu se mai pornește** (două servere ar avea istorice diferite).
 - Pe workstation: Administrare → Stare și arhivă → „Diagnostic conexiune”, pentru IP-ul real prin Funnel.
 - Backup-ul automat rulează pe workstation; recomandat un al doilea disc acolo.
+
+## Rezultat (28.10.2026, ~22:00)
+
+Mutarea a reușit. Serverul rulează pe workstation, iar laptopul nu mai servește nimic.
+
+- Restaurare `nexus-20261028-214646-197`: toate amprentele SHA-256 verificate.
+- **Port 8788 pe workstation**, nu 8787: portul 8787 e folosit acolo de interfața Kronos AI. Setat în
+  `%LOCALAPPDATA%NexusChatconfig.json` (`"port": 8788`). Funnel: `https://desktop-br58s2c.tailb799d9.ts.net` →
+  `http://127.0.0.1:8788`. **Nu porni niciodată Funnel pe 8787 pe workstation**: ar expune interfața Kronos.
+- Pornire automată: `%APPDATA%MicrosoftWindowsStart MenuProgramsStartupNexusChat-server.cmd`.
+- Taildrop pe Windows salvează automat fișierele primite în Downloads (`tailscale file get` găsește coada goală).
+- Pagina republicată cu `previousBackendUrls` = adresa laptopului. Verificări din exterior: 12/12; prin releul
+  public o cerere durează ~0,8 s (de pe laptop 2–8 s).
+- Funnel pe laptop: oprit. Arhiva de pe laptop: păstrată ca rezervă, nu se mai pornește.

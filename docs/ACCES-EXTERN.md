@@ -12,7 +12,12 @@ Telefon (4G / Wi-Fi)                                   Laptopul tău
                      vede doar metadate          decriptează TLS aici, pe laptop
 ```
 
-## Stare (28.10.2026)
+## Stare (28.10.2026, după mutare)
+- **Serverul rulează pe workstation-ul DESKTOP-BR58S2C** (port 8788), adresa publică
+  `https://desktop-br58s2c.tailb799d9.ts.net`. Vezi [MUTARE-WORKSTATION.md](MUTARE-WORKSTATION.md).
+  Secțiunile de mai jos descriu configurarea inițială de pe laptop.
+
+## Stare inițială (laptop)
 - **Funnel este pornit**: `https://kronos.tailb799d9.ts.net` → serverul NEXUS (`127.0.0.1:8787`). Doar acest port este expus.
 - **Pagina este publicată**: <https://adriancu91.github.io/nexus-chat/> (ramura `gh-pages`), cu `config.json` către adresa de mai sus.
 - Verificări din exterior trecute: 12/12 (`npm run check:external`), plus prin releul public Funnel: HTTPS valid, CORS, preflight, refuz origine străină, 401 fără sesiune, WebSocket.
