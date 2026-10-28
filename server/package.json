@@ -1,0 +1,24 @@
+{
+  "name": "@nexus-chat/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend NEXUS CHAT: camere, autentificare, mesaje în timp real, arhivă SQLite locală.",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.ts\"",
+    "admin:code": "node src/cli/admin-code.ts"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2"
+  }
+}
