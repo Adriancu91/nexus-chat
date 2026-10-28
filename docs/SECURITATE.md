@@ -74,9 +74,18 @@ mesaj WebSocket — niciodată în URL (URL-urile ajung în jurnale de proxy).
 | Jurnal administrativ fără secrete | `services/audit.ts` | „…jurnalul nu conține tokenuri” |
 | Interogări SQL parametrizate (fără concatenare de date) | `services/*` | — |
 
+## Măsuri în interfața web (M2, cu teste E2E)
+
+| Măsură | Detalii |
+|---|---|
+| Fără innerHTML | Tot textul (mesaje, nume) intră în pagină ca nod text (`web/src/dom.ts`). Link-urile din mesaje devin `<a>` doar pentru `http(s)://`, cu `rel="noopener noreferrer"`. Test: „HTML din mesaje este afișat ca text”. |
+| CSP strict | `default-src 'none'; script-src 'self'; style-src 'self'`, fără scripturi sau stiluri inline. Test: „pagina publicată are CSP strict”. |
+| Cheia administratorului | Generată cu `extractable: false`: nici măcar codul paginii nu o poate citi, doar semna cu ea. Tokenul de administrator stă în `sessionStorage` (dispare la închiderea filei). |
+| Tokenul participantului | În `localStorage` (pentru a rămâne în cameră după repornirea telefonului). Risc acceptat: un XSS l-ar putea citi; atenuat de CSP și de lipsa innerHTML. „Ieși din cameră” revocă tokenul și pe server. |
+| Adresa serverului | Vine din build sau din Setări, **niciodată din link-uri**, ca un link primit să nu poată trimite pe cineva către un server străin. Pentru adrese non-locale se acceptă doar https://. |
+| Fără cookie-uri | `credentials: omit`, deci CSRF nu se aplică. |
+
 ## Încă neimplementat (planificat)
-- XSS: textul mesajelor este stocat ca atare; clientul (M2) trebuie să-l afișeze **doar ca text**
-  (`textContent`), plus CSP strict pe pagina GitHub Pages.
 - Upload-uri periculoase, path traversal (M3): fișierele vor avea nume interne UUID, niciodată
   căi primite de la utilizator; descărcare cu `Content-Disposition: attachment` și `nosniff`.
 - Backup criptat și verificat (M3).
