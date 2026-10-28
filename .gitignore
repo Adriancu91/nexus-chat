@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+# date locale: arhivă, baze de date, backup-uri — nu ajung NICIODATĂ în Git
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+backups/
+# secrete
+.env
+.env.*
+*.pem
+*.key
+# Rust / Tauri
+target/
+# editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
