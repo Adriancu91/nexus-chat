@@ -1,7 +1,8 @@
 # NEXUS CHAT
 
-Aplicație privată de comunicare pentru familie și prieteni. Serverul și arhiva rulează pe laptopul
-proprietarului (Windows 11); interfața web va fi publicată pe GitHub Pages.
+Aplicație privată de comunicare pentru familie și prieteni. Serverul și arhiva rulează pe un calculator
+al proprietarului (Windows 11); interfața web este publicată pe GitHub Pages:
+<https://adriancu91.github.io/nexus-chat/>.
 
 > **Stare:** M4 finalizat — chat, fișiere, căutare, backup, acces din internet (GitHub Pages + Tailscale Funnel).
 > Serverul rulează pe workstation-ul pornit 24/7. Apelurile (M5) nu există încă.
