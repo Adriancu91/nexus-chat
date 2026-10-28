@@ -180,3 +180,12 @@ pentru cont + rularea scriptului ca administrator.
 TLS făcut de Funnel pe 8443, `external_tls`) și modul „doar releu” în client există; testul local a trecut o
 dată, apoi a eșuat 3/3 (pachetele dintre releu și serverul media de pe același calculator se pierd). Cauza nu este
 identificată; testul e marcat `fixme`. Nu este activat în producție.
+
+**Test real (28.10.2026, seara):** apel audio-video iPhone (Safari) ↔ laptop (Chrome) prin serverul media LiveKit
+de pe laptop, cu Tailscale ca drum (pagină publicată doar în rețeaua Tailscale, server de test separat).
+Proprietarul: „merge foarte bine, nu se blochează”. Confirmă ecranul de apel pe iOS și calitatea pe un drum
+direct. Testul din internet pentru familie (fără Tailscale pe telefoane) rămâne după regula de firewall de pe
+workstation.
+
+**Observație:** pachetul JavaScript a crescut la ~584 KB (158 KB gzip) din cauza bibliotecii de apeluri; de
+încărcat la cerere (doar când se intră în apel), ca pagina să se deschidă mai repede pe telefon.
