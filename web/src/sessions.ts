@@ -63,6 +63,31 @@ export function saveRoomSession(join: JoinResponse): RoomSession {
   return session;
 }
 
+/** Trece pe adresa curentă sesiunile salvate pentru o adresă veche a aceluiași server. */
+export function migrateRoomSessions(previous: string[]): void {
+  const current = backendUrl();
+  const all = readAll();
+  let changed = false;
+  const migrated = all.map((s) => {
+    if (!previous.includes(s.backend)) return s;
+    changed = true;
+    return { ...s, backend: current };
+  });
+  if (!changed) return;
+  // Dacă aceeași cameră există pe ambele adrese, se păstrează sesiunea cea mai nouă.
+  const byRoom = new Map<string, RoomSession>();
+  for (const s of migrated) {
+    const key = `${s.backend} ${s.roomId}`;
+    const existing = byRoom.get(key);
+    if (!existing || existing.expiresAt < s.expiresAt) byRoom.set(key, s);
+  }
+  try {
+    writeAll([...byRoom.values()]);
+  } catch {
+    // stocare indisponibilă
+  }
+}
+
 export function forgetRoomSession(roomId: string): void {
   const backend = backendUrl();
   writeAll(readAll().filter((s) => !(s.roomId === roomId && s.backend === backend)));

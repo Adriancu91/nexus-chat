@@ -45,6 +45,23 @@ export async function getLocalDevice(): Promise<StoredDevice | undefined> {
   return tx<StoredDevice | undefined>('readonly', (s) => s.get(backendUrl()) as IDBRequest<StoredDevice | undefined>);
 }
 
+/**
+ * Mută înregistrarea dispozitivului de la o adresă veche a serverului la cea curentă.
+ * Cheia privată (CryptoKey ne-exportabil) se copiază ca obiect, nu ca date: rămâne
+ * la fel de ne-exportabilă.
+ */
+export async function migrateAdminDevice(previous: string[]): Promise<boolean> {
+  if (!('indexedDB' in window) || (await getLocalDevice())) return false;
+  for (const old of previous) {
+    const device = await tx<StoredDevice | undefined>('readonly', (s) => s.get(old) as IDBRequest<StoredDevice | undefined>);
+    if (!device) continue;
+    await tx('readwrite', (s) => s.put({ ...device, backend: backendUrl() }));
+    await tx('readwrite', (s) => s.delete(old));
+    return true;
+  }
+  return false;
+}
+
 export async function forgetLocalDevice(): Promise<void> {
   clearAdminSession();
   await tx('readwrite', (s) => s.delete(backendUrl()));

@@ -20,10 +20,12 @@ export function normalizeBackendUrl(value: string): string {
 }
 
 let publishedBackend: string | null = null;
+let publishedPrevious: string[] = [];
 
 /**
  * Citește `config.json` publicat lângă pagină (aceeași origine, controlat de proprietarul
  * repository-ului). Permite schimbarea adresei serverului fără un build nou.
+ * `previousBackendUrls` = adrese vechi ale aceluiași server (după o mutare pe alt calculator).
  */
 export async function loadPublishedConfig(): Promise<void> {
   try {
@@ -32,11 +34,42 @@ export async function loadPublishedConfig(): Promise<void> {
     const res = await fetch('./config.json', { cache: 'no-store', signal: ctrl.signal, credentials: 'omit' });
     window.clearTimeout(timer);
     if (!res.ok) return;
-    const data = (await res.json()) as { backendUrl?: unknown };
+    const data = (await res.json()) as { backendUrl?: unknown; previousBackendUrls?: unknown };
     if (typeof data.backendUrl === 'string' && data.backendUrl) publishedBackend = normalizeBackendUrl(data.backendUrl);
+    if (Array.isArray(data.previousBackendUrls)) {
+      publishedPrevious = data.previousBackendUrls.flatMap((u) => {
+        try {
+          return typeof u === 'string' ? [normalizeBackendUrl(u)] : [];
+        } catch {
+          return [];
+        }
+      });
+    }
   } catch {
     // fără config.json (dezvoltare) sau valoare invalidă: se folosesc celelalte surse
   }
+}
+
+/**
+ * Adresele anterioare ale serverului, publicate de proprietar. Se compară cu adresa publicată,
+ * nu cu o eventuală setare manuală, care poate indica tocmai serverul vechi.
+ */
+export function previousBackendUrls(): string[] {
+  const published = publishedBackendUrl();
+  return publishedPrevious.filter((u) => u !== published);
+}
+
+/** Adresa serverului fără setarea manuală din browser. */
+export function publishedBackendUrl(): string {
+  for (const c of [publishedBackend, import.meta.env.VITE_BACKEND_URL as string | undefined, FALLBACK]) {
+    if (!c) continue;
+    try {
+      return normalizeBackendUrl(c);
+    } catch {
+      // valoare invalidă: încercăm următoarea
+    }
+  }
+  return FALLBACK;
 }
 
 /**

@@ -16,6 +16,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const { values } = parseArgs({
   options: {
     backend: { type: 'string' },
+    previous: { type: 'string', multiple: true },
     remote: { type: 'string' },
     branch: { type: 'string', default: 'gh-pages' },
     'dry-run': { type: 'boolean' },
@@ -31,6 +32,14 @@ if (!values.backend) fail('Lipsește --backend https://… (adresa publică a la
 const backend = new URL(values.backend);
 if (backend.protocol !== 'https:') fail('Adresa serverului trebuie să fie https://.');
 const backendUrl = (backend.origin + backend.pathname).replace(/\/+$/, '');
+// Adresele vechi ale aceluiași server (după o mutare): browserele își mută singure sesiunile.
+const previousBackendUrls = (values.previous ?? [])
+  .map((u) => {
+    const p = new URL(u);
+    if (p.protocol !== 'https:') fail('Adresele anterioare trebuie să fie https://.');
+    return (p.origin + p.pathname).replace(/\/+$/, '');
+  })
+  .filter((u) => u !== backendUrl);
 
 const git = (args, cwd = root) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 const remote = values.remote ?? git(['remote', 'get-url', 'origin']);
@@ -40,7 +49,7 @@ console.log('1/4 Construiesc interfața web…');
 execSync('npm run build -w web', { cwd: root, stdio: 'inherit', env: { ...process.env, VITE_BACKEND_URL: '' } });
 
 const dist = path.join(root, 'web', 'dist');
-writeFileSync(path.join(dist, 'config.json'), JSON.stringify({ backendUrl }, null, 2) + '\n');
+writeFileSync(path.join(dist, 'config.json'), JSON.stringify(previousBackendUrls.length ? { backendUrl, previousBackendUrls } : { backendUrl }, null, 2) + '\n');
 if (!existsSync(path.join(dist, '.nojekyll'))) writeFileSync(path.join(dist, '.nojekyll'), '');
 
 console.log('2/4 Verific conținutul…');
@@ -62,7 +71,7 @@ for (const f of files) {
 const html = readFileSync(path.join(dist, 'index.html'), 'utf8');
 if (!html.includes('Content-Security-Policy')) fail('index.html nu conține CSP; opresc publicarea.');
 for (const f of files) console.log(`    ${f}`);
-console.log(`    config.json → backendUrl = ${backendUrl}`);
+console.log(`    config.json → backendUrl = ${backendUrl}${previousBackendUrls.length ? `, anterioare: ${previousBackendUrls.join(', ')}` : ''}`);
 
 if (values['dry-run']) {
   console.log('\n--dry-run: nu am publicat nimic.');

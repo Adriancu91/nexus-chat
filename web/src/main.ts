@@ -1,6 +1,7 @@
 import './styles.css';
 import { loadPublishedConfig } from './config.ts';
 import { clear } from './dom.ts';
+import { migrateBackendData } from './migrate.ts';
 import { navigate } from './nav.ts';
 import { renderAdmin } from './views/admin.ts';
 import { renderChat } from './views/chat.ts';
@@ -50,5 +51,6 @@ function decodeURIComponentSafe(s: string): string {
 }
 
 await loadPublishedConfig();
+await migrateBackendData();
 window.addEventListener('hashchange', route);
 route();
