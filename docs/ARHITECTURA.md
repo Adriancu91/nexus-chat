@@ -28,7 +28,7 @@ parole sau sesiuni. Toate datele private stau pe laptopul gazdă.
 | Arhivă | SQLite (`node:sqlite`, inclus în Node) + fișiere pe disc | **M1 + M3 — implementat** (căutare FTS5, backup, retenție) |
 | Web Client | TypeScript + Vite, fără framework, română | **M2 — implementat** |
 | Conectare externă | Tailscale Funnel (recomandat) — vezi [CONECTIVITATE.md](CONECTIVITATE.md) | M4 |
-| Server media | mediasoup (SFU) pe laptop | M5 |
+| Server media | LiveKit (SFU, open source) lângă NEXUS, pornit de NEXUS | **M5 partea 1 — implementat** |
 | Desktop Host | Tauri 2 (Rust) care rulează backend-ul ca proces separat | M6 |
 
 ## Decizii tehnice
@@ -69,6 +69,18 @@ CSP strict în client (M2) și afișarea textului mesajelor exclusiv ca text.
 ### D6. Serverul ascultă doar pe 127.0.0.1
 Implicit backend-ul nu este accesibil nici măcar din rețeaua locală. Accesul extern se face printr-un
 tunel care se conectează din interior spre exterior (nu se deschid porturi în router).
+
+### D8. Server media: LiveKit, nu mediasoup (M5)
+mediasoup cere Microsoft Visual C++ Redistributable, care se instalează doar cu drepturi de administrator
+(imposibil de la distanță pe workstation). LiveKit este un singur executabil (Go), fără dependențe, open source
+(Apache-2.0), testat pe iOS/Android, cu rezerve TCP/TURN pentru rețele dificile.
+- NEXUS pornește `livekit-server` ca proces-copil, generează configurația și o cheie secretă locală
+  (`livekit-keys.json` în folderul arhivei, niciodată în Git).
+- Semnalizarea LiveKit ascultă doar pe 127.0.0.1; browserele ajung la ea prin NEXUS (`/rtc`, proxy WebSocket),
+  deci prin același tunel HTTPS. Media (UDP 7882 / TCP 7881) merge direct la serverul media.
+- NEXUS emite „bilete” (JWT, 10 min) doar pentru camera la care sesiunea are acces; revocarea scoate imediat
+  persoana din apel. LiveKit anunță intrările/ieșirile prin webhook semnat → banner „Apel în curs” în chat.
+- Fără înregistrare: componenta Egress nu este instalată.
 
 ### D7. Desktop Host: Tauri, nu Electron
 Tauri produce un instalator mic (~10 MB vs ~150 MB), nu cere drepturi de administrator (instalare

@@ -41,6 +41,7 @@ import { authenticateHash, publicPrincipal, revokeSessions } from '../services/s
 import { asObject, cleanLabel, cleanMessageBody, isUuid, optionalBool, optionalInt, password, token } from '../validation.ts';
 import { created, noContent, ok } from './http.ts';
 import { Router, type RequestContext } from './router.ts';
+import type { CallService } from '../calls/calls.ts';
 import type { Hub } from '../ws/hub.ts';
 import type { Ctx } from '../context.ts';
 
@@ -60,7 +61,7 @@ function uuidParam(rc: RequestContext, key: string): string {
   return v;
 }
 
-export function buildRouter(ctx: Ctx, hub: Hub): Router {
+export function buildRouter(ctx: Ctx, hub: Hub, calls: CallService): Router {
   const { limits } = ctx.config;
   const adminAuth = new AdminAuth(ctx);
   const joinIpLimiter = new RateLimiter(limits.joinFailuresPerIp, limits.joinWindowMs, ctx.now);
@@ -68,6 +69,7 @@ export function buildRouter(ctx: Ctx, hub: Hub): Router {
   const adminFailLimiter = new RateLimiter(limits.adminFailuresPerIp, limits.adminWindowMs, ctx.now);
   const adminChallengeLimiter = new RateLimiter(limits.adminChallengesPerIp, limits.adminWindowMs, ctx.now);
   const uploadLimiter = new RateLimiter(limits.uploadsPerWindow, limits.uploadWindowMs, ctx.now);
+  const callTokenLimiter = new RateLimiter(30, 10 * 60_000, ctx.now);
   const startedAt = ctx.now();
 
   const guardAdminFailures = (ip: string) => {
@@ -314,6 +316,19 @@ export function buildRouter(ctx: Ctx, hub: Hub): Router {
     const room = requireRoomAccess(ctx, rc.principal, rc.params.roomId, { write: false });
     const limit = intParam(rc.query, 'limit', 1, 200) ?? 100;
     return ok({ roomId: room.id, ...listRoomFiles(ctx, room.id, limit, intParam(rc.query, 'beforeSeq', 0, Number.MAX_SAFE_INTEGER)) });
+  });
+
+  // ---- apeluri ----
+  router.add('POST', '/api/rooms/:roomId/call/token', async (rc) => {
+    const principal = requirePrincipal(rc.principal);
+    const room = requireRoomAccess(ctx, principal, rc.params.roomId, { write: true });
+    if (!callTokenLimiter.hit(principal.sessionId)) throw tooManyRequests(callTokenLimiter.blockedFor(principal.sessionId));
+    return created(await calls.issueToken(principal, room.id));
+  });
+
+  router.add('GET', '/api/rooms/:roomId/call', async (rc) => {
+    const room = requireRoomAccess(ctx, rc.principal, rc.params.roomId, { write: false });
+    return ok(await calls.state(room.id));
   });
 
   router.add('GET', '/api/rooms/:roomId/search', (rc) => {

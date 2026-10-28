@@ -3,9 +3,12 @@ import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { DatabaseSync } from 'node:sqlite';
+import { CallService } from './calls/calls.ts';
+import { ensureLiveKitKeys, LiveKitProcess, liveKitYaml, RoomServiceClient } from './calls/livekit.ts';
+import { isRtcPath, proxyRtcHttp, proxyRtcUpgrade } from './calls/proxy.ts';
 import { openDatabase } from './db/database.ts';
 import { HttpError } from './errors.ts';
-import { bearerToken, clientIp, corsHeaders, readJson, sendReply } from './http/http.ts';
+import { bearerToken, clientIp, corsHeaders, isOriginAllowed, readJson, sendReply } from './http/http.ts';
 import { buildRouter } from './http/routes.ts';
 import { authenticateToken } from './services/sessions.ts';
 import { Hub } from './ws/hub.ts';
@@ -15,8 +18,11 @@ import type { Ctx } from './context.ts';
 export interface App {
   ctx: Ctx;
   hub: Hub;
+  calls: CallService;
   server: http.Server;
   listen(): Promise<AddressInfo>;
+  /** Pornește serverul media LiveKit (dacă e configurat). Se apelează după listen(). */
+  startCalls(): Promise<boolean>;
   close(): Promise<void>;
 }
 
@@ -25,11 +31,36 @@ export function openDataDir(config: Config): DatabaseSync {
   return openDatabase(path.join(config.dataDir, 'nexus.db'));
 }
 
+const WEBHOOK_PATH = '/internal/livekit/webhook';
+
+async function readRaw(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req as AsyncIterable<Buffer>) {
+    size += chunk.length;
+    if (size > maxBytes) throw new HttpError(413, 'payload_too_large', 'Cererea este prea mare.');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 export function createApp(config: Config, now: () => number = Date.now): App {
   const db = openDataDir(config);
   const ctx: Ctx = { db, config, now };
   const hub = new Hub(ctx);
-  const router = buildRouter(ctx, hub);
+
+  const livekitBin = config.calls.livekitBinary;
+  const keys = livekitBin ? ensureLiveKitKeys(config.dataDir) : null;
+  const calls = new CallService(
+    ctx,
+    keys ? { keys, rooms: new RoomServiceClient(`http://127.0.0.1:${config.calls.httpPort}`, keys) } : null,
+  );
+  calls.onState = (state) => hub.broadcast(state.roomId, { type: 'call', ...state });
+  hub.callState = (roomId) => calls.state(roomId);
+  hub.onInvalidated = () => void calls.kickInvalid();
+  let livekit: LiveKitProcess | null = null;
+
+  const router = buildRouter(ctx, hub, calls);
 
   const server = http.createServer(async (req, res) => {
     const cors = corsHeaders(config, req.headers.origin);
@@ -37,6 +68,16 @@ export function createApp(config: Config, now: () => number = Date.now): App {
       if (cors === null) throw new HttpError(403, 'origin_not_allowed', 'Originea nu este permisă.');
       if (req.method === 'OPTIONS') return sendReply(res, { status: 204 }, cors);
       const url = new URL(req.url ?? '/', 'http://localhost');
+
+      if (url.pathname === WEBHOOK_PATH && req.method === 'POST') {
+        const ok = await calls.handleWebhook(await readRaw(req, 64 * 1024), req.headers.authorization);
+        return sendReply(res, { status: ok ? 200 : 401, body: { ok } });
+      }
+      if (isRtcPath(url.pathname)) {
+        if (!calls.available) throw new HttpError(404, 'calls_unavailable', 'Apelurile nu sunt configurate pe server.');
+        return proxyRtcHttp(config.calls.httpPort, req, res, cors);
+      }
+
       let match;
       try {
         match = router.match(req.method ?? 'GET', url.pathname);
@@ -70,19 +111,45 @@ export function createApp(config: Config, now: () => number = Date.now): App {
   server.headersTimeout = 15_000;
   // Generos pentru upload-uri mari pe date mobile; headersTimeout rămâne scurt (anti-slowloris).
   server.requestTimeout = 30 * 60_000;
-  server.on('upgrade', (req, socket, head) => hub.handleUpgrade(req, socket, head));
+  server.on('upgrade', (req, socket, head) => {
+    const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+    if (isRtcPath(pathname)) {
+      if (!calls.available || !isOriginAllowed(config, req.headers.origin)) {
+        socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+        return;
+      }
+      return proxyRtcUpgrade(config.calls.httpPort, req, socket, head);
+    }
+    hub.handleUpgrade(req, socket, head);
+  });
 
   return {
     ctx,
     hub,
+    calls,
     server,
     listen: () =>
       new Promise((resolve, reject) => {
         server.once('error', reject);
         server.listen(config.port, config.host, () => resolve(server.address() as AddressInfo));
       }),
+    startCalls: async () => {
+      if (!livekitBin || !keys) return false;
+      const addr = server.address() as AddressInfo;
+      const configFile = path.join(config.dataDir, 'livekit.yaml');
+      fs.writeFileSync(configFile, liveKitYaml(config.calls, keys, `http://127.0.0.1:${addr.port}${WEBHOOK_PATH}`), { mode: 0o600 });
+      livekit = new LiveKitProcess({
+        binary: livekitBin,
+        configFile,
+        logFile: path.join(path.dirname(config.dataDir), 'logs', 'livekit.log'),
+        httpPort: config.calls.httpPort,
+      });
+      livekit.start();
+      return livekit.waitReady();
+    },
     close: async () => {
       hub.close();
+      await livekit?.stop();
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
         server.closeAllConnections();

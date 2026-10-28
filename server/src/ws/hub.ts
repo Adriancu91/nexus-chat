@@ -15,6 +15,7 @@ import {
   type Principal,
 } from '../services/sessions.ts';
 import { cleanMessageBody, optionalClientMsgId } from '../validation.ts';
+import type { CallState } from '../calls/calls.ts';
 import type { Ctx } from '../context.ts';
 
 /** Coduri de închidere WebSocket specifice aplicației (interval 4000–4999). */
@@ -52,6 +53,10 @@ export class Hub {
   private readonly sendLimiter: RateLimiter;
   private readonly heartbeat: NodeJS.Timeout;
   private closed = false;
+  /** Starea apelului camerei, trimisă la abonare (furnizată de serviciul de apeluri). */
+  callState: ((roomId: string) => Promise<CallState>) | null = null;
+  /** Apelat după ce sesiuni au fost invalidate (revocare, închiderea camerei etc.). */
+  onInvalidated: () => void = () => undefined;
 
   constructor(ctx: Ctx) {
     this.ctx = ctx;
@@ -165,6 +170,10 @@ export class Hub {
     client.rooms.add(room.id);
     this.send(client, { type: 'history', ref, roomId: room.id, room: { id: room.id, name: room.name, closedAt: room.closedAt }, ...page });
     this.broadcastPresence(room.id);
+    this.callState?.(room.id).then(
+      (state) => this.send(client, { type: 'call', ...state }),
+      () => undefined,
+    );
   }
 
   private onHistory(client: Client, principal: Principal, msg: Incoming, ref: string | undefined): void {
@@ -205,6 +214,7 @@ export class Hub {
 
   /** Închide imediat conexiunile ale căror sesiuni nu mai sunt valide (după revocare, închiderea camerei etc.). */
   disconnectInvalid(): void {
+    this.onInvalidated();
     for (const c of this.clients) {
       if (c.principal && !authenticateHash(this.ctx, c.principal.tokenHash)) {
         this.send(c, { type: 'error', code: 'session_revoked', message: 'Accesul a fost revocat.' });

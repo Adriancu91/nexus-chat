@@ -98,6 +98,19 @@ mesaj WebSocket — niciodată în URL (URL-urile ajung în jurnale de proxy).
 | Backup | Fără date private în GitHub. **Necriptat**: protejează folderul de backup cu BitLocker To Go pe un disc extern. Restaurarea refuză un backup cu amprente greșite și nu șterge arhiva existentă. |
 | O singură instanță | Fișierul `server.lock` împiedică două servere să scrie în aceeași arhivă. |
 
+## Apeluri (M5, cu teste)
+
+| Măsură | Detalii |
+|---|---|
+| Acces | Bilet JWT semnat de NEXUS, valabil 10 min, limitat la o cameră; fără drept de canal de date. Doar cine are acces la cameră îl primește (test). |
+| Revocare | Participantul revocat / camera închisă → scos imediat și din apel (test E2E). |
+| Semnalizare | LiveKit ascultă doar pe 127.0.0.1; din exterior doar prin NEXUS (`/rtc`), cu aceeași verificare de origine. |
+| Webhook-uri | Acceptate doar cu semnătură JWT validă peste SHA-256 al corpului (test). |
+| Topologie | Verificat automat: fiecare browser comunică media doar cu serverul media (cel mult 2 conexiuni), niciodată direct cu ceilalți. |
+| Criptare | Media e criptată în tranzit (DTLS-SRTP) până la serverul media; **nu este end-to-end**: serverul gazdei poate accesa fluxurile (nu le înregistrează). |
+| Înregistrare | Nu există. Componenta de înregistrare LiveKit nu este instalată. |
+| Secret | `livekit-keys.json` generat local la prima pornire, în folderul arhivei. |
+
 ## Riscuri acceptate explicit
 - **Origine comună GitHub Pages** (28.10.2026): NEXUS este publicat pe `adriancu91.github.io`, aceeași origine cu alte
   6 site-uri ale contului. Codul acelor site-uri ar putea citi sesiunile participanților și folosi cheia de

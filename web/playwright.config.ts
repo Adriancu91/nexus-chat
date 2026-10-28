@@ -20,7 +20,17 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], channel }, testIgnore: /mobile\.spec\.ts/ },
+    {
+      name: 'desktop',
+      use: {
+        ...devices['Desktop Chrome'],
+        channel,
+        // Cameră și microfon simulate pentru testele de apel.
+        permissions: ['camera', 'microphone'],
+        launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] },
+      },
+      testIgnore: /mobile\.spec\.ts/,
+    },
     { name: 'mobil', use: { ...devices['Pixel 7'], channel }, testMatch: /mobile\.spec\.ts/ },
   ],
   webServer: [
